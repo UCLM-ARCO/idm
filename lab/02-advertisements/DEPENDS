@@ -1,0 +1,7 @@
+arduino: MsTimer2
+arduino: IceC
+arduino: XBeeEndpoint
+arduino: EasyXBee
+arduino: XBee
+
+deb: duo
