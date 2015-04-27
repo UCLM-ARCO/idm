@@ -3,7 +3,6 @@
 
 import sys
 import Ice
-from hexdump import hexdump
 
 
 def get_property(ic, name):
@@ -14,9 +13,34 @@ def get_property(ic, name):
     return value
 
 
+class NoSuchRoute(Exception):
+    pass
+
+
 class RoutingTable(object):
-    def __init__(self, path):
-        pass
+    def __init__(self, ic, path):
+        self.ic = ic
+        self.routes = {}
+
+        with file(path) as src:
+            self.proccess_file(src)
+
+    def proccess_file(self, src):
+        for line in src:
+            line = line.strip()
+            if line.startswith(":"):
+                continue
+
+            destination, endpoints = map(str.strip, line.split("\t"))
+            self.routes[destination] = endpoints
+
+    def get_next(self, oid):
+        oid = self.ic.identityToString(oid)
+        endps = self.routes.get(oid, None)
+        if endps is None:
+            raise NoSuchRoute
+
+        return self.ic.stringToProxy("{} -o:{}".format(oid, endps))
 
 
 class Router(Ice.Blobject):
@@ -24,11 +48,13 @@ class Router(Ice.Blobject):
         self.ic = ic
 
         path = get_property(ic, "Router.Table.Path")
-        self.table = RoutingTable(path)
+        self.table = RoutingTable(ic, path)
 
     def ice_invoke(self, bytes, current):
-        print "ice_invoke", current.operation,
-        hexdump(bytes)
+        next = self.table.get_next(current.id)
+        print "- forward to '{}'".format(next)
+
+        next.ice_invoke(current.operation, current.mode, bytes)
 
         return True, buffer("")
 
