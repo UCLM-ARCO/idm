@@ -21,7 +21,7 @@ DUO_IBool_WI_set(DUO_IBool_WPtr self, Ice_Bool v, DUO_Identity oid) {
     digitalWrite(led_pin, v);
 }
 
-// This is a IRS: keep it as short as possible
+// This is an IRS: keep it as short as possible
 void
 advertise() {
     timedout = true;
@@ -34,6 +34,10 @@ setup() {
     IceC_XBeeEndpoint_init(&ic);
     pinMode(13, OUTPUT);
     pinMode(led_pin, OUTPUT);
+
+    digitalWrite(led_pin, HIGH);
+    delay(500);
+    digitalWrite(led_pin, LOW);
 
     const char* endps = "xbee -p idm -n server";
     const char* sep = " -d:";
@@ -59,21 +63,23 @@ setup() {
     strcpy(str_proxy + i, endps);
 
     Ice_Communicator_stringToProxy
-	(&ic, str_proxy, &servant_proxy);
+    	(&ic, str_proxy, &servant_proxy);
 
     // Create proxy to advertisement listener
     Ice_Communicator_stringToProxy
-	(&ic, "Listener -d:xbee -p idm -n listener", &adv_proxy);
+    	(&ic, "Listener -d:xbee -p idm -n listener", &adv_proxy);
 
     // Launch timer to advertise itself
-    MsTimer2::set(1000, advertise);
+    MsTimer2::set(2000, advertise);
     MsTimer2::start();
 }
 
 void
 loop() {
+    Ice_Communicator_loopIteration(&ic);
+
     if (!timedout)
-	return;
+    	return;
 
     digitalWrite(13, HIGH);
     DUO_Listener_adv(&adv_proxy, &servant_proxy);
