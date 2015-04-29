@@ -1,0 +1,3 @@
+: destination | endpoints | mode
+: --------------------------------------------------
+Server | xbee  -p idm -n server | d

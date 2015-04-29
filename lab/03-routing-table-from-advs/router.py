@@ -25,15 +25,16 @@ class NoSuchRoute(Exception):
 class RoutingTable(object):
     def __init__(self, ic, path):
         self.ic = ic
+        self.path = path
         self.lock = Lock()
         self.routes = {}
 
         with file(path) as src:
             self.proccess_file(src)
 
-    def add(self, destination, endpoints):
+    def add(self, destination, endpoints, mode):
         with self.lock:
-            self.routes[destination] = endpoints
+            self.routes[destination] = (endpoints, mode)
 
     def proccess_file(self, src):
         for line in src:
@@ -41,25 +42,38 @@ class RoutingTable(object):
             if line.startswith(":"):
                 continue
 
-            destination, endpoints = map(str.strip, line.split("\t"))
-            self.add(destination, endpoints)
+            try:
+                destination, endpoints, mode = map(str.strip, line.split(" | "))
+                self.add(destination, endpoints, mode)
+            except Exception:
+                print "WARNING: Invalid line on routing table, ignoring..."
+
+    def store(self):
+        header = ": destination | endpoints | mode\n: " + "-" * 50 + "\n"
+        with file(self.path, "w") as dst:
+            dst.write(header)
+            for destination, info in self.routes.items():
+                line = "{} | {} | {}\n".format(destination, *info)
+                dst.write(line)
 
     def get_next(self, oid):
         oid = self.ic.identityToString(oid)
-        endps = self.routes.get(oid, None)
-        if endps is None:
+        route = self.routes.get(oid, None)
+        if route is None:
             raise NoSuchRoute
 
-        return self.ic.stringToProxy("{} -o:{}".format(oid, endps))
+        endps, mode = route[0], route[1]
+        proxy = self.ic.stringToProxy("{} -{}:{}".format(oid, mode, endps))
+        proxy = proxy.ice_encodingVersion(Ice.Encoding_1_0)
+        return proxy
 
 
 class Router(Ice.Blobject):
     def __init__(self, table):
         self.table = table
 
-    # FIXME: make table persisten
     def __del__(self):
-        pass
+        self.table.store()
 
     def ice_invoke(self, bytes, current):
         try:
@@ -83,7 +97,14 @@ class ListenerI(DUO.Listener):
         ic = current.adapter.getCommunicator()
         destination = ic.identityToString(proxy.ice_getIdentity())
         endpoints = ":".join(map(str, proxy.ice_getEndpoints()))
-        self.table.add(destination, endpoints)
+
+        mode = "t"
+        if proxy.ice_isDatagram():
+            mode = "d"
+        elif proxy.ice_isOneway():
+            mode = "o"
+
+        self.table.add(destination, endpoints, mode)
 
 
 class RouterServer(Ice.Application):

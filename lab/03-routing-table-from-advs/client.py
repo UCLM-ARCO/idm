@@ -14,6 +14,7 @@ class Client(Ice.Application):
 
         remote = ic.stringToProxy(args[1])
         remote = DUO.IBool.WPrx.uncheckedCast(remote)
+        remote = remote.ice_encodingVersion(Ice.Encoding_1_0)
 
         state = args[2] != "0"
         oid = ic.stringToIdentity("client")

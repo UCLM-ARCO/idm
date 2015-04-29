@@ -5,4 +5,5 @@ arduino: EasyXBee
 arduino: XBee
 
 deb: duo
+deb: ice-xbee
 deb: python-zeroc-ice
