@@ -20,11 +20,11 @@ all: $(SLICE:%.ice=%.h)
 
 upload-all:
 	rm -f build-atmega328/*.o
-	$(MAKE) upload PORT=/dev/ttyUSB0 ADDR=1
+	$(MAKE) upload PORT=/dev/ttyUSB0 ADDR=2
 	rm -f build-atmega328/*.o
-	$(MAKE) upload PORT=/dev/ttyUSB1 ADDR=2
+	$(MAKE) upload PORT=/dev/ttyUSB1 ADDR=3
 	rm -f build-atmega328/*.o
-	$(MAKE) upload PORT=/dev/ttyUSB2 ADDR=3
+	$(MAKE) upload PORT=/dev/ttyUSB2 ADDR=4
 
 %.h: %.ice
 	slice2c $^

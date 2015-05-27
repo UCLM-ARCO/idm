@@ -20,7 +20,7 @@ Arduinos).
 The IDM addressing scheme used here is 16 bit length, with a netmask of 8
 bits. The Ice Identity specifies each byte in its decimal notation,
 separated by a dot, much like IPv4. Examples: `1.2`, `192.50` or
-`254.1`. The address `0.0` has a special meaning depending on context, 
+`254.1`. The address `0.0` has a special meaning depending on context,
 it usually means "no address" and should not be assinged to a node.
 
 ![Network Topology](topology.svg)
@@ -52,12 +52,12 @@ If you want to launch only one server, run this:
     $ ./server.py <addr>
 
 where `<addr>` should be the IDM addres on the PC side (the network
-part of the address is 2). Examples of addresses are 2.2 or 2.254. If
-you want to launch all the servers at once, use the script called
-`launch-servers.sh`. This will run each server on a different terminal
-window (provided that you have `xterm` installed). The optional
-`offset` param is used to set the `geometry` argument to put the
-window on the screen.
+part of the address is 2). Examples of addresses are `2.2` or
+`2.254`. If you want to launch all the servers at once, use the script
+called `launch-servers.sh`. This will run each server on a different
+terminal window (provided that you have `gnome-terminal`
+installed). The optional `offset` param is used to set the `geometry`
+argument to put the window on the screen.
 
     $ ./launch-servers.sh [offset]
 
@@ -82,8 +82,8 @@ Sending messages
 
 You can send messages to every node in the IDM network.
 
-From the Arduinos
------------------
+From an Arduino
+---------------
 
 Each Arduino node has a _harcoded_ destination address (given by a
 small table in the source code). When someone presses the push button, it

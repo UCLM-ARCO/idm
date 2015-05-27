@@ -15,6 +15,7 @@ Ice_Communicator ic;
 Ice_ObjectAdapter adapter;
 Ice_ObjectPrx remote;
 DUO_IBool_W servant;
+DUO_Identity oid;
 
 
 void
@@ -53,6 +54,10 @@ setup() {
     sprintf(strprx, "%s -d:rrp -a 1", dst);
 
     Ice_Communicator_stringToProxy(&ic, strprx, &remote);
+
+    // Create oid used later on remote invocations
+    Ice_String_init(oid.name, servant_id);
+    Ice_String_init(oid.category, "");
 }
 
 void
@@ -62,15 +67,10 @@ loop() {
 
     // If button state has changed, send the message
     if (newState != oldState) {
-	// Ice_String name;
-	// Ice_String_init(name, "Sarah");
-
-	// Example_Hello_helloFrom(&remote, name);
-	// oldState = newState;
-	// digitalWrite(DEBUG_LED, newState);
+	DUO_IBool_W_set(&remote, newState, oid);
+	oldState = newState;
     }
 
-    // // This endpoint in particular needs some housekeeping to be done,
-    // // in client mode, this method will do it
-    // IceC_RRPEndpoint_tick();
+    // Allow Ice to receive and process messages
+    Ice_Communicator_loopIteration(&ic);
 }
