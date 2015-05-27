@@ -20,7 +20,8 @@ Arduinos).
 The IDM addressing scheme is 16 bit length, with a netmask of 8
 bits. The Ice Identity specifies each byte in its decimal notation,
 separated by a dot, much like IPv4. Examples: `1.2`, `192.50` or
-`254.1`
+`254.1`. The address `0.0` has a special meaning depending on context, 
+it usually means "no address" and should not be assinged to a node.
 
 ![Network Topology](topology.svg)
 
