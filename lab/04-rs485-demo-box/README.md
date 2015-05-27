@@ -17,7 +17,7 @@ interface. Moreover, a client could also be used to send messages to
 every node in the IDM network (either to the PC servers or to the
 Arduinos).
 
-The IDM addressing scheme is 16 bit length, with a netmask of 8
+The IDM addressing scheme used here is 16 bit length, with a netmask of 8
 bits. The Ice Identity specifies each byte in its decimal notation,
 separated by a dot, much like IPv4. Examples: `1.2`, `192.50` or
 `254.1`. The address `0.0` has a special meaning depending on context, 
@@ -34,12 +34,13 @@ and debuging, but it is never used for data communications.
 
 There are three Arduinos, each one with different **IDM** and **RRP
 addresses**, but all share the same source code. In order to program
-just one node, specify the node address on make command:
+just one node, specify on make command the node addres and the USB
+device used:
 
-    $ make compile upload ADDR=2
+    $ make all upload PORT=/dev/ttyUSB0 ADDR=2
 
-This will give the node the IDM address: 1.2, and the RRP addres:
-2. To upload the code to all nodes at once, use the following:
+This will give the node the IDM address: `1.2`, and the RRP addres:
+`2`. To upload the code to all nodes at once, use the following:
 
     $ make upload-all
 
