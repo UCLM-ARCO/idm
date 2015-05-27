@@ -29,11 +29,12 @@ Programming the Arduinos
 ========================
 
 **Note**: the arduinos are connected to the PC using the serial devices
-`/dev/ttyUSB0` to `/dev/ttyUSB2`.
+`/dev/ttyUSB0` to `/dev/ttyUSB2`. These connection handle programming
+and debuging, but it is never used for data communications.
 
 There are three Arduinos, each one with different **IDM** and **RRP
 addresses**, but all share the same source code. In order to program
-just one node, specify the node addres on make command:
+just one node, specify the node address on make command:
 
     $ make compile upload ADDR=2
 
