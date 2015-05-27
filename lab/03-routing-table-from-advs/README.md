@@ -3,7 +3,7 @@ In this example, the XBee trasceiver will be used in an Object Adapter
 and in a Proxy, so it will be needed the serial-handler service to
 serialize the use of the transceiver.
 
-To launch this demo, you will need at least thre terminals. First,
+To launch this demo, you will need at least three terminals. First,
 launch the xbee-service, as follows:
 
     $ ./xbee-service.sh
