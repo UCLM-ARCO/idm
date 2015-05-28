@@ -17,7 +17,7 @@ class Server(Ice.Application):
     def run(self, args):
         ic = self.communicator()
 
-        port = 9600 + int(args[1].split(".")[-1])
+        port = 9000 + int(args[1].split(".")[-1])
         adapter = ic.createObjectAdapterWithEndpoints(
             "Adapter", "tcp -h 127.0.0.1 -p {}".format(port))
         adapter.activate()

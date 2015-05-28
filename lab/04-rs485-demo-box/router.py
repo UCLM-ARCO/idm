@@ -50,10 +50,12 @@ class RoutingTable(object):
                 print "WARNING: Invalid line on routing table, ignoring..."
 
     def store(self):
-        header = ": destination | endpoints | mode\n: " + "-" * 50 + "\n"
+        header = ": DO NOT EDIT, it will be overwritten!\n"
+        header += ": destination | endpoints | mode\n: " + "-" * 50 + "\n"
         with file(self.path, "w") as dst:
             dst.write(header)
-            for destination, info in self.routes.items():
+            for destination in sorted(self.routes.keys()):
+                info = self.routes[destination]
                 line = "{} | {} | {}\n".format(destination, *info)
                 dst.write(line)
 
