@@ -98,6 +98,7 @@ provided. Unlike the Arduinos, the PC client can send a message to
 every other node, doesn't matter if the destination is a PC server or
 an Arduino one. To use the client, run:
 
-    $ ./client.py <addr>
+    $ ./client.py <addr> <0|1>
 
-The addr param is an IDM address, like `1.2` or `2.4`.
+The addr param is an IDM address, like `1.2` or `2.4`, and the second
+param is the state (bool) that should be sent.
