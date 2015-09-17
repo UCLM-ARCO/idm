@@ -2,7 +2,7 @@
 Overview
 ========
 
-Here we will use the RS-485 demo box: thre Arduinos, each one with a
+Here we will use the RS-485 demo box: three Arduinos, each one with a
 push button and a led, connected to others using a RS-485 bus through a
 transceiver, and a RS-485 to USB adapter connected to the PC.
 
