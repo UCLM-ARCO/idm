@@ -75,7 +75,7 @@ packages):
 
 Now, you are ready to run the router, using the following command:
 
-    $ ./router.py
+    $ ./router.py --Ice.Config=router.config
 
 Sending messages
 ================

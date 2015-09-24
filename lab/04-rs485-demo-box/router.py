@@ -136,4 +136,4 @@ class RouterServer(Ice.Application):
 
 
 if __name__ == '__main__':
-    exit(RouterServer().main(sys.argv, "router.config"))
+    exit(RouterServer().main(sys.argv))
