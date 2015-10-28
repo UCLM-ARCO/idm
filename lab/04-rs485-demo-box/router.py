@@ -119,7 +119,10 @@ class RouterServer(Ice.Application):
 
         adapter = ic.createObjectAdapter("Router.Adapter")
         adapter.activate()
-        proxy = adapter.add(ListenerI(table), ic.stringToIdentity("Router"))
+
+        oid = ic.getProperties().getPropertyWithDefault("Router.Id", "Router")
+        oid = ic.stringToIdentity(oid)
+        proxy = adapter.add(ListenerI(table), oid)
         adapter.addDefaultServant(Router(table), "")
 
         print "Router at '{}'".format(proxy)
