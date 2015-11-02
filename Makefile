@@ -11,3 +11,6 @@ install:
 	install -d $(DESTDIR)/usr/share/idm-embedded/example
 	install -m 444 src/router.config $(DESTDIR)/usr/share/idm-embedded/example
 	install -m 444 src/router.table $(DESTDIR)/usr/share/idm-embedded/example
+
+	install -d $(DESTDIR)/usr/share/slice/idm/
+	install -m 444 src/idm.ice $(DESTDIR)/usr/share/slice/idm/
