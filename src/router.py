@@ -1,1 +1,1 @@
-../lab/04-rs485-demo-box/router.py
+../lab/05-idm-slice/router.py

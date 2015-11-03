@@ -1,14 +1,17 @@
 #!/usr/bin/python -u
 # -*- mode: python; coding: utf-8 -*-
 
-import sys
 import os
+import sys
 import Ice
 from threading import Lock
 
-# For DUO.Listener interface (node advertisements)
-Ice.loadSlice("/usr/share/slice/duo/DUO.ice -I /usr/share/Ice/slice --all")
-import DUO
+idm_slice = os.path.join(os.path.dirname(__file__), "idm.ice")
+if not os.path.exists(idm_slice):
+    idm_slice = "/usr/share/slice/idm/idm.ice"
+
+Ice.loadSlice(idm_slice)
+import IDM
 
 
 def get_property(ic, name):
@@ -91,13 +94,14 @@ class Router(Ice.Blobject):
         return True, buffer("")
 
 
-class ListenerI(DUO.Listener):
+class ListenerI(IDM.Listener):
     def __init__(self, table):
         self.table = table
 
     def adv(self, proxy, current):
         print "- adv from '{}'".format(proxy)
         ic = current.adapter.getCommunicator()
+        proxy = ic.stringToProxy(proxy)
         destination = ic.identityToString(proxy.ice_getIdentity())
         endpoints = ":".join(map(str, proxy.ice_getEndpoints()))
 
