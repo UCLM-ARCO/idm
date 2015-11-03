@@ -40,6 +40,10 @@ class RoutingTable(object):
         with self.lock:
             self.routes[destination] = (endpoints, mode)
 
+    def remove(self, destination):
+        with self.lock:
+            self.routes.pop(destination)
+
     def proccess_file(self, src):
         for line in src:
             line = line.strip()
@@ -113,6 +117,10 @@ class ListenerI(IDM.Listener):
 
         self.table.add(destination, endpoints, mode)
 
+    def bye(self, oid, current):
+        print "- bye from '{}'".format(oid)
+        self.table.remove(oid)
+
 
 class RouterServer(Ice.Application):
     def run(self, args):
@@ -134,6 +142,7 @@ class RouterServer(Ice.Application):
         print "Waiting events..."
         self.shutdownOnInterrupt()
         ic.waitForShutdown()
+        print "Shutting down..."
 
     def get_router_table_path(self, ic):
         path = get_property(ic, "Router.Table.Path")
