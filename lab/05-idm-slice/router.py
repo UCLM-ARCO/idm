@@ -94,11 +94,11 @@ class Router(Ice.Blobject):
     def __del__(self):
         self.table.store()
 
-    def ice_invoke(self, bytes, current):
+    def ice_invoke(self, in_params, current):
         try:
             next = self.table.get_next(current.id)
             print "- forward to '{}'".format(next)
-            next.ice_invoke(current.operation, current.mode, bytes)
+            return next.ice_invoke(current.operation, current.mode, in_params, current.ctx)
         except NoSuchRoute:
             ic = current.adapter.getCommunicator()
             oid = ic.identityToString(current.id)
