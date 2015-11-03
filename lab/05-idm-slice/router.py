@@ -40,9 +40,18 @@ class RoutingTable(object):
         with self.lock:
             self.routes[destination] = (endpoints, mode)
 
+            # FIXME: store in a separate thread, once each 5 mins (or so)
+            self.store()
+
     def remove(self, destination):
         with self.lock:
-            self.routes.pop(destination)
+            try:
+                self.routes.pop(destination)
+
+                # FIXME: store in a separate thread, once each 5 mins (or so)
+                self.store()
+            except KeyError:
+                pass
 
     def proccess_file(self, src):
         for line in src:
