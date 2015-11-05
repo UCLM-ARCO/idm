@@ -2,20 +2,13 @@
 
 module IDM {
 
-    sequence<byte> IDMId;
+    sequence<byte> Address;
 
-    interface Listener {
-     	void adv(string prx);   // 'prx' is an stringfied proxy
-	void bye(IDMId oid);
-    };
+    module NeighborDiscovery {
 
-    module Active {
-	interface R {
-	    IDMId getObserver();
-	};
-
-	interface W {
-	    void setObserver(IDMId observer);
+	interface Listener {
+	    void adv(string proxy);
+	    void bye(Address oid);
 	};
     };
 
