@@ -107,7 +107,7 @@ class Router(Ice.Blobject):
         return True, buffer("")
 
 
-class ListenerI(IDM.Listener):
+class ListenerI(IDM.NeighborDiscovery.Listener):
     def __init__(self, table):
         self.table = table
 
