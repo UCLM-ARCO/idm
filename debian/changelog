@@ -1,28 +1,34 @@
-idm-embedded (0.20151109-1) unstable; urgency=low
+idm (0.20151204-1) unstable; urgency=low
+
+  * New release, remove non-vital depends
+
+ -- Oscar Aceña Herrera <oscaracena@gmail.com>  Fri, 04 Dec 2015 11:35:54 +0100
+
+idm (0.20151109-1) unstable; urgency=low
 
   * New release
 
  -- Oscar Aceña Herrera <oscaracena@gmail.com>  Mon, 09 Nov 2015 11:44:47 +0100
 
-idm-embedded (0.20151105-1) unstable; urgency=low
+idm (0.20151105-1) unstable; urgency=low
 
   * New release
 
  -- Oscar Aceña Herrera <oscaracena@gmail.com>  Thu, 05 Nov 2015 09:25:23 +0100
 
-idm-embedded (0.20151102-1) unstable; urgency=low
+idm (0.20151102-1) unstable; urgency=low
 
   * New release
 
  -- Oscar Aceña Herrera <oscaracena@gmail.com>  Mon, 02 Nov 2015 09:33:56 +0100
 
-idm-embedded (0.20150924-1) unstable; urgency=low
+idm (0.20150924-1) unstable; urgency=low
 
   * New release, avoid using hardcoded configuration file
 
  -- Oscar Aceña Herrera <oscaracena@gmail.com>  Thu, 24 Sep 2015 11:05:52 +0200
 
-idm-embedded (0.20150917-1) unstable; urgency=low
+idm (0.20150917-1) unstable; urgency=low
 
   * Initial release
 

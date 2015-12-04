@@ -1,15 +1,14 @@
-Source: idm-embedded
+Source: idm
 Section: net
 Priority: extra
 Maintainer: Oscar Aceña Herrera <oscaracena@gmail.com>
 Build-Depends: debhelper (>= 7.0.50~), python
 Standards-Version: 3.9.6
 
-Package: idm-embedded
+Package: idm
 Architecture: all
-Depends: ${misc:Depends}, python, ice-pyendpoint, rrp, ice-remoteio,
- python-zeroc-ice
+Depends: ${misc:Depends}, python, python-zeroc-ice
 Description: Inter Domain Messaging
  IDM is a protocol for communicating devices across different
  technologies. This package provides the router and some example
- files
+ files.

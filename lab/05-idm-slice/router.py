@@ -98,7 +98,8 @@ class Router(Ice.Blobject):
         try:
             next = self.table.get_next(current.id)
             print "- forward to '{}'".format(next)
-            return next.ice_invoke(current.operation, current.mode, in_params, current.ctx)
+            return next.ice_invoke(
+                current.operation, current.mode, in_params, current.ctx)
         except NoSuchRoute:
             ic = current.adapter.getCommunicator()
             oid = ic.identityToString(current.id)
@@ -147,7 +148,6 @@ class RouterServer(Ice.Application):
         adapter.addDefaultServant(Router(table), "")
 
         print "Router at '{}'".format(proxy)
-
         print "Waiting events..."
         self.shutdownOnInterrupt()
         ic.waitForShutdown()
