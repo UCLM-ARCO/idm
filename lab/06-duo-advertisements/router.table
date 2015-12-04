@@ -1,0 +1,9 @@
+: DO NOT EDIT, it will be overwritten!
+: destination | endpoints | mode
+: --------------------------------------------------
+1.2 | p2p -m rrp -a 2 | d
+1.3 | p2p -m rrp -a 3 | d
+1.4 | p2p -m rrp -a 4 | d
+2.2 | tcp -h 127.0.0.1 -p 9002 | o
+2.3 | tcp -h 127.0.0.1 -p 9003 | o
+2.4 | tcp -h 127.0.0.1 -p 9004 | o

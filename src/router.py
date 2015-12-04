@@ -1,1 +1,1 @@
-../lab/05-idm-slice/router.py
+../lab/06-duo-advertisements/router.py

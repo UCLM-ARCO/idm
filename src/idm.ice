@@ -1,1 +1,1 @@
-../lab/05-idm-slice/idm.ice
+../lab/06-duo-advertisements/idm.ice
