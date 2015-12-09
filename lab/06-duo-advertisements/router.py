@@ -173,7 +173,7 @@ class DUOAdvertiser(IDM.NeighborDiscovery.Listener):
 
     def bye(self, addr, current):
         self.listener.bye(addr, current)
-        self.pub.adv(addr)
+        self.pub.bye(addr)
 
 
 class RouterServer(Ice.Application):

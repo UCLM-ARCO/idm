@@ -3,6 +3,7 @@
 
 import sys
 import Ice
+import time
 
 Ice.loadSlice("/usr/share/slice/idm/idm.ice")
 import IDM
@@ -18,6 +19,9 @@ class Client(Ice.Application):
 
         print "Announced: '{}'".format(announced)
         router.adv(announced)
+
+        time.sleep(1)
+        router.bye([int('EE', 16), int('FF', 16)])
 
 
 if __name__ == '__main__':

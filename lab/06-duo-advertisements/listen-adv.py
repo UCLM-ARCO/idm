@@ -14,6 +14,10 @@ class ListenerI(DUO.IDM.Listener):
         addr = self.get_printable_addr(addr)
         print "- adv from '{}'".format(addr)
 
+    def bye(self, addr, current):
+        addr = self.get_printable_addr(addr)
+        print "- bye from '{}'".format(addr)
+
     def get_printable_addr(self, addr):
         return "".join([hex(ord(x))[2:] for x in addr])
 
@@ -22,10 +26,11 @@ class Server(Ice.Application):
     def run(self, args):
         self.ic = self.communicator()
 
-        adapter = self.ic.createObjectAdapterWithEndpoints("Adapter", "tcp")
+        adapter = self.ic.createObjectAdapterWithEndpoints(
+            "Adapter", "tcp -h 192.168.1.131")
         adapter.activate()
 
-        subs = adapter.addWithUUID(ListenerI())
+        subs = adapter.addWithUUID(ListenerI()).ice_oneway()
         self.subscribe_to_topic(subs)
 
         print "Waiting events..."
@@ -41,6 +46,7 @@ class Server(Ice.Application):
         except IceStorm.NoSuchTopic:
             topic = mgr.create(topic_name)
 
+        print "Subscribing '{}' to '{}' topic".format(proxy, topic_name)
         topic.subscribeAndGetPublisher({}, proxy)
 
 
