@@ -4,6 +4,7 @@
 import os
 import sys
 import Ice
+import IceStorm
 from threading import Lock
 
 
@@ -152,13 +153,27 @@ class DUOAdvertiser(IDM.NeighborDiscovery.Listener):
         try:
             topic = mgr.retrieve(topic_name)
         except IceStorm.NoSuchTopic:
-            topic = mgr.
+            topic = mgr.create(topic_name)
+
+        pub = topic.getPublisher()
+        return DUO.IDM.ListenerPrx.uncheckedCast(pub)
+
+    def get_idm_addr(self, str_proxy):
+        proxy = self.ic.stringToProxy(str_proxy)
+        oid = proxy.ice_getIdentity()
+        oid = self.ic.identityToString(oid)
+        addr = map(lambda x: int(x, 16), oid)
+        return addr
 
     def adv(self, proxy, current):
         self.listener.adv(proxy, current)
 
-    def bye(self, oid, current):
-        self.listener.bye(oid, current)
+        addr = self.get_idm_addr(proxy)
+        self.pub.adv(addr)
+
+    def bye(self, addr, current):
+        self.listener.bye(addr, current)
+        self.pub.adv(addr)
 
 
 class RouterServer(Ice.Application):
