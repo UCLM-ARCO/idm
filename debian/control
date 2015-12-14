@@ -7,7 +7,7 @@ Standards-Version: 3.9.6
 
 Package: idm
 Architecture: all
-Depends: ${misc:Depends}, python, python-zeroc-ice, duo
+Depends: ${misc:Depends}, python, python-zeroc-ice36, duo
 Replaces: idm-embedded
 Description: Inter Domain Messaging
  IDM is a protocol for communicating devices across different
