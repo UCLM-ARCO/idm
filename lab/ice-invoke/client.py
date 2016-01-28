@@ -12,7 +12,7 @@ class Client(Ice.Application):
         proxy = ic.stringToProxy("Server -t:tcp -h 127.0.0.1 -p 2000")
 
         print "Using proxy: '{}'".format(proxy)
-        for i in range(40):
+        for i in range(1000):
             proxy.ice_ping()
 
 

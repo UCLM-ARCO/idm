@@ -135,7 +135,8 @@ class ListenerI(IDM.NeighborDiscovery.Listener):
         self.table.add(destination, endpoints, mode)
 
     def bye(self, oid, current):
-        print "- bye from '{}'".format(oid)
+        stroid = "{:02X}{:02X}".format(*map(ord, oid))
+        print "- bye from '{}'".format(stroid)
         self.table.remove(oid)
 
 
@@ -144,11 +145,16 @@ class DUOAdvertiser(IDM.NeighborDiscovery.Listener):
     def __init__(self, listener, ic):
         self.listener = listener
         self.ic = ic
+        self.enabled = False
         self.pub = self.get_publisher("announce")
 
     def get_publisher(self, topic_name):
         mgr = self.ic.propertyToProxy("IceStorm.TopicManager.Proxy")
         mgr = IceStorm.TopicManagerPrx.checkedCast(mgr)
+
+        if mgr is None:
+            print "WARNING: DUO advertisements disabled"
+            return
 
         try:
             topic = mgr.retrieve(topic_name)
@@ -156,23 +162,31 @@ class DUOAdvertiser(IDM.NeighborDiscovery.Listener):
             topic = mgr.create(topic_name)
 
         pub = topic.getPublisher()
+        self.enabled = True
         return DUO.IDM.ListenerPrx.uncheckedCast(pub)
 
     def get_idm_addr(self, str_proxy):
         proxy = self.ic.stringToProxy(str_proxy)
         oid = proxy.ice_getIdentity()
         oid = self.ic.identityToString(oid)
-        addr = map(lambda x: int(x, 16), oid)
+        addr = [int(oid[0:2], 16), int(oid[2:4], 16)]
         return addr
 
     def adv(self, proxy, current):
         self.listener.adv(proxy, current)
+
+        if not self.enabled:
+            return
 
         addr = self.get_idm_addr(proxy)
         self.pub.adv(addr)
 
     def bye(self, addr, current):
         self.listener.bye(addr, current)
+
+        if not self.enabled:
+            return
+
         self.pub.bye(addr)
 
 
