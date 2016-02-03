@@ -85,6 +85,11 @@ class RoutingTable(object):
     def get_next(self, oid):
         oid = self.ic.identityToString(oid)
         route = self.routes.get(oid, None)
+
+        if route is None:
+            netid = oid[:2] + "*"
+            route = self.routes.get(netid, None)
+
         if route is None:
             raise NoSuchRoute
 
@@ -161,7 +166,13 @@ class DUOAdvertiser(IDM.NeighborDiscovery.Listener):
         except IceStorm.NoSuchTopic:
             topic = mgr.create(topic_name)
 
-        pub = topic.getPublisher()
+        pub = topic.getPublisher().ice_datagram()
+        try:
+            pub.ice_ping()
+        except Ice.NoEndpointException:
+            print "WARNING: DUO advertisements disabled"
+            return
+
         self.enabled = True
         return DUO.IDM.ListenerPrx.uncheckedCast(pub)
 
