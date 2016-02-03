@@ -1,3 +1,9 @@
+idm (0.20160203-1) unstable; urgency=low
+
+  * New release
+
+ -- Oscar Aceña Herrera <oscaracena@gmail.com>  Wed, 03 Feb 2016 13:30:54 +0100
+
 idm (0.20151214-1) unstable; urgency=low
 
   * New release: move to Ice3.6

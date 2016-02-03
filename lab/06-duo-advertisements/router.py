@@ -126,9 +126,15 @@ class ListenerI(IDM.NeighborDiscovery.Listener):
 
     def adv(self, proxy, current):
         print "- adv from '{}'".format(proxy)
+
+        fields = proxy.split(" ")
+        destination = fields[0]
+        if "*" in destination:
+            fields[0] = "dummy"
+
+        proxy = " ".join(fields)
         ic = current.adapter.getCommunicator()
         proxy = ic.stringToProxy(proxy)
-        destination = ic.identityToString(proxy.ice_getIdentity())
         endpoints = ":".join(map(str, proxy.ice_getEndpoints()))
 
         mode = "t"
@@ -187,6 +193,10 @@ class DUOAdvertiser(IDM.NeighborDiscovery.Listener):
         self.listener.adv(proxy, current)
 
         if not self.enabled:
+            return
+
+        # do not advertise default routes
+        if "*" in proxy.split(" ")[0]:
             return
 
         addr = self.get_idm_addr(proxy)
