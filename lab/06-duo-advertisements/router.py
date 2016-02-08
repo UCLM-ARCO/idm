@@ -5,7 +5,7 @@ import os
 import sys
 import Ice
 import IceStorm
-from threading import Lock
+from threading import Lock, Thread
 
 
 def load_slice(name, parent=""):
@@ -213,6 +213,10 @@ class DUOAdvertiser(IDM.NeighborDiscovery.Listener):
 
 class RouterServer(Ice.Application):
     def run(self, args):
+        if "--autokill" in args:
+            timeout = int(args[args.index("--autokill") + 1])
+            self.__theend = AutoKill(timeout)
+
         ic = self.communicator()
 
         path = self.get_router_table_path(ic)
@@ -238,6 +242,19 @@ class RouterServer(Ice.Application):
         if not os.path.exists(path):
             os.mknod(path)
         return path
+
+
+class AutoKill(Thread):
+    def __init__(self, timeout):
+        Thread.__init__(self)
+        self.daemon = True
+        self.timeout = timeout
+        self.start()
+
+    def run(self):
+        import time
+        time.sleep(self.timeout)
+        os.system('kill -9 {}'.format(os.getpid()))
 
 
 if __name__ == '__main__':

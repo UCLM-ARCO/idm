@@ -1,0 +1,5 @@
+: DO NOT EDIT, it will be overwritten!
+: destination | endpoints | mode
+: --------------------------------------------------
+0001 | xendp | d
+0002 | udp -h 127.0.0.1 -p 1234 | d
