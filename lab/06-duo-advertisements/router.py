@@ -6,6 +6,8 @@ import sys
 import Ice
 import IceStorm
 from threading import Lock, Thread
+import logging
+logging.getLogger().setLevel(logging.INFO)
 
 
 def load_slice(name, parent=""):
@@ -70,7 +72,7 @@ class RoutingTable(object):
                 destination, endpoints, mode = map(str.strip, line.split(" | "))
                 self.add(destination, endpoints, mode)
             except Exception:
-                print "WARNING: Invalid line on routing table, ignoring..."
+                logging.warn("WARNING: Invalid line on routing table, ignoring...")
 
     def store(self):
         header = ": DO NOT EDIT, it will be overwritten!\n"
@@ -109,13 +111,13 @@ class Router(Ice.Blobject):
     def ice_invoke(self, in_params, current):
         try:
             next = self.table.get_next(current.id)
-            print "- forward to '{}'".format(next)
+            logging.info("forward to '{}'".format(next))
             return next.ice_invoke(
                 current.operation, current.mode, in_params, current.ctx)
         except NoSuchRoute:
             ic = current.adapter.getCommunicator()
             oid = ic.identityToString(current.id)
-            print "- ERROR: no route to '{}'".format(oid)
+            logging.error("no route to '{}'".format(oid))
 
         return True, buffer("")
 
@@ -125,7 +127,7 @@ class ListenerI(IDM.NeighborDiscovery.Listener):
         self.table = table
 
     def adv(self, proxy, current):
-        print "- adv from '{}'".format(proxy)
+        logging.info("adv from '{}'".format(proxy))
 
         fields = proxy.split(" ")
         destination = fields[0]
@@ -147,7 +149,7 @@ class ListenerI(IDM.NeighborDiscovery.Listener):
 
     def bye(self, oid, current):
         stroid = "{:02X}{:02X}".format(*map(ord, oid))
-        print "- bye from '{}'".format(stroid)
+        logging.info("bye from '{}'".format(stroid))
         self.table.remove(oid)
 
 
@@ -164,7 +166,7 @@ class DUOAdvertiser(IDM.NeighborDiscovery.Listener):
         mgr = IceStorm.TopicManagerPrx.checkedCast(mgr)
 
         if mgr is None:
-            print "WARNING: DUO advertisements disabled"
+            logging.warn("DUO advertisements disabled")
             return
 
         try:
@@ -176,7 +178,7 @@ class DUOAdvertiser(IDM.NeighborDiscovery.Listener):
         try:
             pub.ice_ping()
         except Ice.NoEndpointException:
-            print "WARNING: DUO advertisements disabled"
+            logging.warn("DUO advertisements disabled")
             return
 
         self.enabled = True
@@ -231,11 +233,11 @@ class RouterServer(Ice.Application):
         proxy = adapter.add(srv, oid)
         adapter.addDefaultServant(Router(table), "")
 
-        print "Router at '{}'".format(proxy)
-        print "Waiting events..."
+        logging.info("Router at '{}'".format(proxy))
+        logging.info("Waiting events...")
         self.shutdownOnInterrupt()
         ic.waitForShutdown()
-        print "Shutting down..."
+        logging.info("Shutting down...")
 
     def get_router_table_path(self, ic):
         path = get_property(ic, "Router.Table.Path")
