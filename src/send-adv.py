@@ -1,1 +1,1 @@
-../lab/06-duo-advertisements/send-adv.py
+../lab/07-router-interface/send-adv.py

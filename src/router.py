@@ -1,1 +1,1 @@
-../lab/06-duo-advertisements/router.py
+../lab/07-router-interface/router.py

@@ -1,1 +1,1 @@
-../lab/06-duo-advertisements/listen-adv.py
+../lab/07-router-interface/listen-adv.py

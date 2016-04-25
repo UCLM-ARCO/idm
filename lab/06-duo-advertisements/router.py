@@ -5,8 +5,10 @@ import os
 import sys
 import Ice
 import IceStorm
+from argparse import ArgumentParser
 from threading import Lock, Thread
 import logging
+
 logging.getLogger().setLevel(logging.INFO)
 
 
@@ -215,9 +217,11 @@ class DUOAdvertiser(IDM.NeighborDiscovery.Listener):
 
 class RouterServer(Ice.Application):
     def run(self, args):
-        if "--autokill" in args:
-            timeout = int(args[args.index("--autokill") + 1])
-            self.__theend = AutoKill(timeout)
+        if not self.parse_args(args[1:]):
+            return 1
+
+        if self.args.autokill is not None:
+            self.__theend = AutoKill(self.args.autokill)
 
         ic = self.communicator()
 
@@ -238,6 +242,16 @@ class RouterServer(Ice.Application):
         self.shutdownOnInterrupt()
         ic.waitForShutdown()
         logging.info("Shutting down...")
+
+    def parse_args(self, args):
+        parser = ArgumentParser()
+        parser.add_argument("--autokill", type=int, help="stops running after N seconds")
+
+        try:
+            self.args = parser.parse_args(args)
+            return True
+        except SystemExit:
+            return False
 
     def get_router_table_path(self, ic):
         path = get_property(ic, "Router.Table.Path")

@@ -1,1 +1,1 @@
-../lab/06-duo-advertisements/idm.ice
+../lab/07-router-interface/idm.ice
