@@ -12,4 +12,22 @@ module IDM {
 	};
     };
 
+    module Ruting {
+
+      enum ActionType {Forward};
+
+      struct Matcher {
+	Address dst;
+      };
+
+      struct Action {
+	ActionType action;
+	string next;
+      };
+
+      interface Router {
+	void flowModify(Matcher m, Action a);
+      };
+
+    };
 };
