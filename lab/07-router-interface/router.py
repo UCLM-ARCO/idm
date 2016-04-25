@@ -74,7 +74,7 @@ class RoutingTable(object):
                 destination, endpoints, mode = map(str.strip, line.split(" | "))
                 self.add(destination, endpoints, mode)
             except Exception:
-                logging.warn("WARNING: Invalid line on routing table, ignoring...")
+                logging.warn("Invalid line on routing table, ignoring...")
 
     def store(self):
         header = ": DO NOT EDIT, it will be overwritten!\n"
