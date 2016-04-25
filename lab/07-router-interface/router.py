@@ -225,19 +225,27 @@ class RouterServer(Ice.Application):
 
         ic = self.communicator()
 
-        path = self.get_router_table_path(ic)
+        try:
+            path = self.get_router_table_path(ic)
+        except ValueError:
+            logging.error("Property 'Router.Table.Path' not set")
+            return 1
+
         table = RoutingTable(ic, path)
 
         adapter = ic.createObjectAdapter("Router.Adapter")
         adapter.activate()
 
-        oid = ic.getProperties().getPropertyWithDefault("Router.Id", "Router")
-        oid = ic.stringToIdentity(oid)
         srv = DUOAdvertiser(ListenerI(table), ic)
-        proxy = adapter.add(srv, oid)
+        proxies = []
+        oids = ic.getProperties().getPropertyWithDefault("Router.Ids", "Router")
+        for oid in oids.split("|"):
+            oid = ic.stringToIdentity(oid.strip())
+            proxies.append(adapter.add(srv, oid))
         adapter.addDefaultServant(Router(table), "")
 
-        logging.info("Router at '{}'".format(proxy))
+        for p in proxies:
+            logging.info("Router at '{}'".format(p))
         logging.info("Waiting events...")
         self.shutdownOnInterrupt()
         ic.waitForShutdown()
