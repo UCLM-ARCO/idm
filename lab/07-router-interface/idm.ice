@@ -12,7 +12,7 @@ module IDM {
 	};
     };
 
-    module Ruting {
+    module Routing {
 
 	enum ActionType {Forward};
 
@@ -25,10 +25,12 @@ module IDM {
 	    string next;
 	};
 
-	interface Router {
+	interface RouterAdmin {
 	    void flowModify(Matcher m, Action a);
 	};
 
     };
+
+    interface Router extends Routing::RouterAdmin, NeighborDiscovery::Listener {};
 
 };

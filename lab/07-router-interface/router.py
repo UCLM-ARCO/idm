@@ -103,7 +103,7 @@ class RoutingTable(object):
         return proxy
 
 
-class Router(Ice.Blobject):
+class Forwarder(Ice.Blobject):
     def __init__(self, table):
         self.table = table
 
@@ -113,32 +113,53 @@ class Router(Ice.Blobject):
     def ice_invoke(self, in_params, current):
         try:
             next = self.table.get_next(current.id)
-            logging.info("forward to '{}'".format(next))
+            logging.info("- forward to '{}'".format(next))
             return next.ice_invoke(
                 current.operation, current.mode, in_params, current.ctx)
         except NoSuchRoute:
             ic = current.adapter.getCommunicator()
             oid = ic.identityToString(current.id)
-            logging.error("no route to '{}'".format(oid))
+            logging.error("- no route to '{}'".format(oid))
 
         return True, buffer("")
 
 
-class ListenerI(IDM.NeighborDiscovery.Listener):
-    def __init__(self, table):
+class RouterI(IDM.Router):
+    def __init__(self, table, ic):
         self.table = table
+        self.ic = ic
+
+    def flowModify(self, matcher, action, current):
+        destination = self.address_to_string(matcher.dst)
+
+        # add route for whole network
+        if destination[2:] == "00":
+            destination = destination[:2] + "*"
+
+        _, endpoints, mode = self.get_proxy_info(action.next)
+
+        logging.info("- flowModify for '{}', dst: {}".format(destination, action.next))
+        self.table.add(destination, endpoints, mode)
 
     def adv(self, proxy, current):
-        logging.info("adv from '{}'".format(proxy))
+        destination, endpoints, mode = self.get_proxy_info(proxy)
 
+        logging.info("- adv from '{}'".format(proxy))
+        self.table.add(destination, endpoints, mode)
+
+    def bye(self, oid, current):
+        stroid = self.address_to_string(oid)
+        logging.info("- bye from '{}'".format(stroid))
+        self.table.remove(oid)
+
+    def get_proxy_info(self, proxy):
         fields = proxy.split(" ")
         destination = fields[0]
         if "*" in destination:
             fields[0] = "dummy"
 
         proxy = " ".join(fields)
-        ic = current.adapter.getCommunicator()
-        proxy = ic.stringToProxy(proxy)
+        proxy = self.ic.stringToProxy(proxy)
         endpoints = ":".join(map(str, proxy.ice_getEndpoints()))
 
         mode = "t"
@@ -147,19 +168,19 @@ class ListenerI(IDM.NeighborDiscovery.Listener):
         elif proxy.ice_isOneway():
             mode = "o"
 
-        self.table.add(destination, endpoints, mode)
+        return destination, endpoints, mode
 
-    def bye(self, oid, current):
-        stroid = "{:02X}{:02X}".format(*map(ord, oid))
-        logging.info("bye from '{}'".format(stroid))
-        self.table.remove(oid)
+    def address_to_string(self, a):
+        return "{:02X}{:02X}".format(*map(ord, a))
 
 
 # A Wrapper, to maintain it decoupled
-class DUOAdvertiser(IDM.NeighborDiscovery.Listener):
-    def __init__(self, listener, ic):
-        self.listener = listener
-        self.ic = ic
+class DUOAdvertiser(IDM.Router):
+    def __init__(self, instance):
+        self.instance = instance
+        self.flowModify = instance.flowModify
+
+        self.ic = instance.ic
         self.enabled = False
         self.pub = self.get_publisher("announce")
 
@@ -194,7 +215,7 @@ class DUOAdvertiser(IDM.NeighborDiscovery.Listener):
         return addr
 
     def adv(self, proxy, current):
-        self.listener.adv(proxy, current)
+        self.instance.adv(proxy, current)
 
         if not self.enabled:
             return
@@ -207,7 +228,7 @@ class DUOAdvertiser(IDM.NeighborDiscovery.Listener):
         self.pub.adv(addr)
 
     def bye(self, addr, current):
-        self.listener.bye(addr, current)
+        self.instance.bye(addr, current)
 
         if not self.enabled:
             return
@@ -236,13 +257,13 @@ class RouterServer(Ice.Application):
         adapter = ic.createObjectAdapter("Router.Adapter")
         adapter.activate()
 
-        srv = DUOAdvertiser(ListenerI(table), ic)
+        srv = DUOAdvertiser(RouterI(table, ic))
         proxies = []
         oids = ic.getProperties().getPropertyWithDefault("Router.Ids", "Router")
         for oid in oids.split("|"):
             oid = ic.stringToIdentity(oid.strip())
             proxies.append(adapter.add(srv, oid))
-        adapter.addDefaultServant(Router(table), "")
+        adapter.addDefaultServant(Forwarder(table), "")
 
         for p in proxies:
             logging.info("Router at '{}'".format(p))

@@ -1,3 +1,9 @@
+idm (0.20160426-1) unstable; urgency=low
+
+  * New release, added admin iface
+
+ -- Oscar Aceña Herrera <oscaracena@gmail.com>  Tue, 26 Apr 2016 12:19:18 +0200
+
 idm (0.20160425-1) unstable; urgency=low
 
   * New release
