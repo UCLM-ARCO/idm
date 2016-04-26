@@ -14,7 +14,7 @@ module IDM {
 
     module Routing {
 
-	enum ActionType {Forward};
+        enum ActionType {Forward};
 
 	struct Matcher {
 	    Address dst;
@@ -25,8 +25,20 @@ module IDM {
 	    string next;
 	};
 
+	struct Flow {
+	  int identifier;
+	  Matcher m;
+	  Action a;
+	  // long idle_timeout;
+	  // Stats;
+	};
+
+	sequence<Flow> FlowSeq;
+
 	interface RouterAdmin {
-	    void flowModify(Matcher m, Action a);
+	  void flowAdd(Flow f);
+	  void flowDelete(int identifier);
+	  FlowSeq flowList();
 	};
 
     };
