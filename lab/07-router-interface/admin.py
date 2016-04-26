@@ -34,7 +34,25 @@ class IDMAdmin(Ice.Application):
         addr = self.string_to_address(self.args.address)
         matcher = IDM.Routing.Matcher(addr)
         action = IDM.Routing.Action(IDM.Routing.ActionType.Forward, self.args.route)
-        self.router.flowModify(matcher, action)
+        flow = IDM.Routing.Flow(0, matcher, action)
+        self.router.flowAdd(flow)
+
+    def cmd_list(self):
+        flows = self.router.flowList()
+        if not flows:
+            print("No flows")
+            return
+
+        print(" #ID | Address | Destination\n" + "-" * 60)
+        for f in sorted(flows, key=lambda x: x.identifier):
+            addr = self.address_to_string(f.m.dst)
+            print("{: 4d}:   {}  ->  {}".format(f.identifier, addr, f.a.next))
+
+    def cmd_delete(self):
+        self.router.flowDelete(self.args.flowid)
+
+    def address_to_string(self, a):
+        return "{:02X}{:02X}".format(*map(ord, a))
 
     def string_to_address(self, s):
         s = s.replace(":", "")
@@ -51,9 +69,14 @@ class IDMAdmin(Ice.Application):
         parser.add_argument("router", help="router where execute the action")
         subparsers = parser.add_subparsers(dest="action")
 
-        parser_action = subparsers.add_parser("add", help="add a new rule")
-        parser_action.add_argument("address", help="network address to match")
-        parser_action.add_argument("route", help="next hop to forward messages")
+        parser_add = subparsers.add_parser("add", help="add a new flow")
+        parser_add.add_argument("address", help="matching address")
+        parser_add.add_argument("route", help="next hop on route")
+
+        subparsers.add_parser("list", help="list current flows")
+
+        parser_delete = subparsers.add_parser("delete", help="remove specified flow")
+        parser_delete.add_argument("flowid", type=int, help="flow identifier")
 
         try:
             self.args = parser.parse_args(args)

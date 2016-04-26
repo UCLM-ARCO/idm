@@ -1,3 +1,9 @@
+idm (0.20160426.1-1) unstable; urgency=low
+
+  * New release, include flowAdd, flowDelete y flowList
+
+ -- Oscar Aceña Herrera <oscaracena@gmail.com>  Tue, 26 Apr 2016 16:06:40 +0200
+
 idm (0.20160426-1) unstable; urgency=low
 
   * New release, added admin iface

@@ -6,7 +6,7 @@ import sys
 import Ice
 import IceStorm
 from argparse import ArgumentParser
-from threading import Lock, Thread
+from threading import RLock, Thread
 import logging
 
 logging.getLogger().setLevel(logging.INFO)
@@ -41,7 +41,7 @@ class RoutingTable(object):
     def __init__(self, ic, path):
         self.ic = ic
         self.path = path
-        self.lock = Lock()
+        self.lock = RLock()
         self.routes = {}
 
         with file(path) as src:
@@ -49,7 +49,11 @@ class RoutingTable(object):
 
     def add(self, destination, endpoints, mode):
         with self.lock:
-            self.routes[destination] = (endpoints, mode)
+            try:
+                id = self.routes[destination][2]
+            except KeyError:
+                id = len(self.routes)
+            self.routes[destination] = (endpoints, mode, id)
 
             # FIXME: store in a separate thread, once each 5 mins (or so)
             self.store()
@@ -63,6 +67,25 @@ class RoutingTable(object):
                 self.store()
             except KeyError:
                 pass
+
+    def remove_by_id(self, id):
+        with self.lock:
+            dst = self.find_id(id)
+            if dst is None:
+                return None, None
+
+            info = self.routes[dst]
+            self.remove(dst)
+            return dst, info
+
+    def find_id(self, id):
+        with self.lock:
+            for dst, info in self.routes.items():
+                if info[2] == id:
+                    return dst
+
+    def list(self):
+        return self.routes
 
     def proccess_file(self, src):
         for line in src:
@@ -129,17 +152,39 @@ class RouterI(IDM.Router):
         self.table = table
         self.ic = ic
 
-    def flowModify(self, matcher, action, current):
-        destination = self.address_to_string(matcher.dst)
+    def flowAdd(self, flow, current):
+        destination = self.address_to_string(flow.m.dst)
 
         # add route for whole network
         if destination[2:] == "00":
             destination = destination[:2] + "*"
 
-        _, endpoints, mode = self.get_proxy_info(action.next)
+        _, endpoints, mode = self.get_proxy_info(flow.a.next)
 
-        logging.info("- flowModify for '{}', dst: {}".format(destination, action.next))
+        logging.info("- flowAdd for '{}', dst: {}".format(destination, flow.a.next))
         self.table.add(destination, endpoints, mode)
+
+    def flowDelete(self, identifier, current):
+        dst, info = self.table.remove_by_id(identifier)
+        rule = " not exists!"
+        if dst is not None:
+            rule = ": {} | {} | {}".format(dst, info[0], info[1])
+        logging.info("- flowDelete of {}, rule{}".format(identifier, rule))
+
+    def flowList(self, current):
+        logging.info("- flowList done")
+        flows = []
+
+        rows = self.table.list()
+        for destination, info in rows.items():
+            addr = self.string_to_address(destination.replace("*", "00"))
+            matcher = IDM.Routing.Matcher(addr)
+            nextHop = "R -{}:{}".format(info[1], info[0])
+            action = IDM.Routing.Action(IDM.Routing.ActionType.Forward, nextHop)
+            flow = IDM.Routing.Flow(info[2], matcher, action)
+            flows.append(flow)
+
+        return flows
 
     def adv(self, proxy, current):
         destination, endpoints, mode = self.get_proxy_info(proxy)
@@ -173,16 +218,24 @@ class RouterI(IDM.Router):
     def address_to_string(self, a):
         return "{:02X}{:02X}".format(*map(ord, a))
 
+    def string_to_address(self, s):
+        s = s.replace(":", "")
+        fields = [s[i:i + 2] for i in range(0, len(s), 2)]
+        return "".join(chr(int(b, 16)) for b in fields)
+
 
 # A Wrapper, to maintain it decoupled
 class DUOAdvertiser(IDM.Router):
     def __init__(self, instance):
         self.instance = instance
-        self.flowModify = instance.flowModify
-
         self.ic = instance.ic
         self.enabled = False
         self.pub = self.get_publisher("announce")
+
+        # redirect not-spied methods
+        self.flowAdd = instance.flowAdd
+        self.flowDelete = instance.flowDelete
+        self.flowList = instance.flowList
 
     def get_publisher(self, topic_name):
         mgr = self.ic.propertyToProxy("IceStorm.TopicManager.Proxy")

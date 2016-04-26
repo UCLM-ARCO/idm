@@ -43,6 +43,7 @@ module IDM {
 
     };
 
-    interface Router extends Routing::RouterAdmin, NeighborDiscovery::Listener {};
-
+    interface Router extends
+	Routing::RouterAdmin,
+	NeighborDiscovery::Listener {};
 };
