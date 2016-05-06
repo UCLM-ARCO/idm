@@ -1,0 +1,31 @@
+<script type="text/javascript">
+ RED.nodes.registerType('IBool', {
+     category: 'IDM',
+     color: '#a6bb00',
+     defaults: {
+	 name: {value: ""},
+	 dst: {value: "", required: true},
+     },
+     inputs:1,
+     outputs:0,
+     icon: "light.png",
+     align: 'right',
+
+     label: function() {
+	 return this.dst || this.name || "IBool";
+     },
+ });
+
+
+</script>
+
+<script type="text/x-red" data-template-name="IBool">
+ <div class="form-row">
+   <label for="node-input-dst">Destination: </label>
+   <input type="text" id="node-input-dst" placeholder="aa:bb">
+ </div>
+</script>
+
+<script type="text/x-red" data-help-name="IBool">
+ <p>A DUO IBool client that uses IDM.</p>
+</script>

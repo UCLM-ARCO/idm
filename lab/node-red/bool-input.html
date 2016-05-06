@@ -1,0 +1,39 @@
+<script type="text/javascript">
+ RED.nodes.registerType('bool-input', {
+     category: 'input',
+     color: '#a6bb00',
+     defaults: {
+	 name: {value: ""},
+     },
+     inputs:0,
+     outputs:1,
+     icon: "button.png",
+
+     button: {
+	 toggle: "state",
+	 onclick: function() {
+             $.ajax({
+		 url: "/bool-input/" + this.id,
+		 type: "POST",
+		 data: {state: this.state},
+	     });
+	 },
+     },
+
+     paletteLabel: "bool",
+     label: function() {
+	 return this.state ? "True" : "False";
+     },
+ });
+</script>
+
+<script type="text/x-red" data-template-name="bool-input">
+ <div class="form-row">
+   <label for="node-input-name">Name: </label>
+   <input type="text" id="node-input-name">
+ </div>
+</script>
+
+<script type="text/x-red" data-help-name="bool-input">
+ <p>A simple boolean toggle button.</p>
+</script>
