@@ -21,6 +21,9 @@ depends: $(SLICE:%.ice=%.js)
 	[ -d node_modules/idm ] || mkdir -p node_modules/idm
 	slice2js --output-dir node_modules/idm /usr/share/slice/idm/idm.ice
 
+upload: clean $(SLICE:%.ice=%.js)
+	npm publish
+
 .PHONY: clean
 clean:
 	$(RM) -vr *~ node_modules

@@ -1,16 +1,20 @@
 {
-    "name": "node-red-contrib-idm",
-    "version": "0.0.5",
-    "description": "Nodes for IDM: configuration and DUO.IBool",
-    "homepage": "https://bitbucket.org/arco_group/idm",
-    "dependencies": {
-	"ice": ">=3.6.1"
-    },
-    "node-red": {
-	"nodes": {
-	    "IBool": "duo-ibool.js",
-	    "bool-input": "bool-input.js",
-	    "idm-router": "idm-config.js"
-	}
+  "name": "node-red-contrib-idm",
+  "version": "0.0.10",
+  "description": "Nodes for IDM: configuration and DUO.IBool",
+  "homepage": "https://bitbucket.org/arco_group/idm",
+  "dependencies": {
+    "ice": ">=3.6.1"
+  },
+  "node-red": {
+    "nodes": {
+      "IBool": "duo-bool.js",
+      "bool-input": "bool-input.js",
+      "idm-router": "idm-config.js"
     }
+  },
+  "bundledDependencies": [
+    "duo_idm.js",
+    "idm"
+  ]
 }
