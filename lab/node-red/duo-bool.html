@@ -35,5 +35,24 @@
 </script>
 
 <script type="text/x-red" data-help-name="IBool">
- <p>A DUO IBool client that uses IDM.</p>
+  <p>This node provides access to an IBool.W object, through IDM.</p>
+
+  <p>It has two properties that should be set:</p>
+  <ul>
+    <li><b>Destination</b>: the IDM address (like <code>10:01</code>)</li>
+    <li><b>IDM Router</b>: the router to use (see below)</li>
+  </ul>
+
+  <p>When an input with payload <code>true</code> or <code>false</code> is connected, it will
+    send a <b>set</b> message to the given destination</p>
+
+  <p>The <code>IBool.W</code> interface is the following:
+    <pre>
+module IBool {
+  interface W {
+    void set(bool v, IDM::Address source);
+  };
+};
+    </pre>
+  </p>
 </script>
