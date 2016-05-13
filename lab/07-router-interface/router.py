@@ -144,6 +144,9 @@ class Forwarder(Ice.Blobject):
             oid = ic.identityToString(current.id)
             logging.error("- no route to '{}'".format(oid))
 
+        except Ice.Exception as e:
+            logging.error("- could not forwared message: " + str(e))
+
         return True, buffer("")
 
 
