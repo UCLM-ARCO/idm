@@ -162,7 +162,11 @@ class RouterI(IDM.Router):
         if destination[2:] == "00":
             destination = destination[:2] + "*"
 
-        _, endpoints, mode = self.get_proxy_info(flow.a.next)
+        try:
+            _, endpoints, mode = self.get_proxy_info(flow.a.next)
+        except Ice.Exception as e:
+            logging.error("- could not add flow: " + str(e))
+            return
 
         logging.info("- flowAdd for '{}', dst: {}".format(destination, flow.a.next))
         self.table.add(destination, endpoints, mode)
@@ -190,7 +194,11 @@ class RouterI(IDM.Router):
         return flows
 
     def adv(self, proxy, current):
-        destination, endpoints, mode = self.get_proxy_info(proxy)
+        try:
+            destination, endpoints, mode = self.get_proxy_info(proxy)
+        except Ice.Exception as e:
+            logging.error("- invalid adv: " + str(e))
+            return
 
         logging.info("- adv from '{}'".format(proxy))
         self.table.add(destination, endpoints, mode)
