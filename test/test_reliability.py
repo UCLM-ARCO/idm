@@ -19,10 +19,12 @@ class TestReliability(TestCase):
 
     def launch_server(self, count):
         server = Task(desc="IDM server", detach=True)
-        cmd = server.command("test/server.py --Ice.Config=test/server.config")
+        cmd = server.command(
+            "test/count-ice-ping-server.py --Ice.Config=test/server.config")
         expected_msg = "ice_ping called {} times".format(count)
         server.assert_that(cmd.stdout.content, hamcrest.contains_string(expected_msg))
 
     def run_stress_client(self, count):
         client = Task(desc="IDM client")
-        client.command("test/client.py FF10 {} --Ice.Config=test/client.config".format(count))
+        client.command(
+            "test/multi-ice-ping-client.py FF10 {} --Ice.Config=test/client.config".format(count))

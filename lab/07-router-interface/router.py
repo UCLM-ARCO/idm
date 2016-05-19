@@ -5,6 +5,7 @@ import os
 import sys
 import Ice
 import IceStorm
+from Queue import Queue, Full
 from argparse import ArgumentParser
 from threading import RLock, Thread
 import logging
@@ -126,28 +127,54 @@ class RoutingTable(object):
         return proxy
 
 
+class IncommingMessage(object):
+    def __init__(self, in_params, current):
+        self.oid = current.id
+        self.operation = current.operation
+        self.mode = current.mode
+        self.ctx = current.ctx.copy()
+        self.in_params = buffer(in_params[:])
+
+
 class Forwarder(Ice.Blobject):
     def __init__(self, table):
         self.table = table
+        self.queue = Queue(maxsize=10)
+
+        # do forwarding on a separated thread
+        t = Thread(target=self.forwarder_loop)
+        t.daemon = True
+        t.start()
 
     def __del__(self):
         self.table.store()
 
     def ice_invoke(self, in_params, current):
-        try:
-            next = self.table.get_next(current.id)
-            logging.info("- forward to '{}'".format(next))
-            return next.ice_invoke(
-                current.operation, current.mode, in_params, current.ctx)
-        except NoSuchRoute:
-            ic = current.adapter.getCommunicator()
-            oid = ic.identityToString(current.id)
-            logging.error("- no route to '{}'".format(oid))
+        msg = IncommingMessage(in_params, current)
 
-        except Ice.Exception as e:
-            logging.error("- could not forwared message: " + str(e))
+        try:
+            self.queue.put_nowait(msg)
+        except Full:
+            logging.error("- could not forward message: full queue!")
 
         return True, buffer("")
+
+    def forwarder_loop(self):
+        while True:
+            msg = self.queue.get()
+            self.process_message(msg)
+
+    def process_message(self, msg):
+        try:
+            next = self.table.get_next(msg.oid)
+            logging.info("- forward to '{}'".format(next))
+            next.ice_invoke(msg.operation, msg.mode, msg.in_params, msg.ctx)
+
+        except NoSuchRoute:
+            oid = Ice.identityToString(msg.oid)
+            logging.error("- no route to '{}'".format(oid))
+        except Ice.Exception as e:
+            logging.error("- could not forward message: " + str(e))
 
 
 class RouterI(IDM.Router):

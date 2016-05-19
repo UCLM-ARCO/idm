@@ -19,5 +19,6 @@ install:
 
 
 .PHONY: test
+test: OPTS ?= -eo
 test:
-	-prego -veo test/test_*.py
+	-prego $(OPTS) test/test_*.py
