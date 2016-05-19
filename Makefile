@@ -16,3 +16,8 @@ install:
 
 	install -d $(DESTDIR)/usr/share/slice/idm/
 	install -m 444 src/idm.ice $(DESTDIR)/usr/share/slice/idm/
+
+
+.PHONY: test
+test:
+	-prego -veo test/test_*.py
