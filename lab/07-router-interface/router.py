@@ -137,9 +137,10 @@ class IncommingMessage(object):
 
 
 class Forwarder(Ice.Blobject):
-    def __init__(self, table):
+    def __init__(self, table, queue_size=10):
         self.table = table
-        self.queue = Queue(maxsize=10)
+        self.queue = Queue(maxsize=queue_size)
+        logging.info("Queue Size: {}".format(queue_size))
 
         # do forwarding on a separated thread
         t = Thread(target=self.forwarder_loop)
@@ -350,11 +351,14 @@ class RouterServer(Ice.Application):
 
         srv = DUOAdvertiser(RouterI(table, ic))
         proxies = []
-        oids = ic.getProperties().getPropertyWithDefault("Router.Ids", "Router")
+        props = ic.getProperties()
+        queue_size = props.getPropertyWithDefault("Router.QueueSize", "10")
+        oids = props.getPropertyWithDefault("Router.Ids", "Router")
+
         for oid in oids.split("|"):
             oid = ic.stringToIdentity(oid.strip())
             proxies.append(adapter.add(srv, oid))
-        adapter.addDefaultServant(Forwarder(table), "")
+        adapter.addDefaultServant(Forwarder(table, queue_size), "")
 
         for p in proxies:
             logging.info("Router at '{}'".format(p))
