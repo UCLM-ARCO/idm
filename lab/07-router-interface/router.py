@@ -238,7 +238,7 @@ class RouterI(IDM.Router):
 
     def get_proxy_info(self, proxy):
         fields = proxy.split(" ")
-        destination = fields[0]
+        destination = fields[0].replace(":", "").strip('"').upper()
         if "*" in destination:
             fields[0] = "dummy"
 
@@ -258,7 +258,7 @@ class RouterI(IDM.Router):
         return "{:02X}{:02X}".format(*map(ord, a))
 
     def string_to_address(self, s):
-        s = s.replace(":", "")
+        s = s.replace(":", "").strip('"')
         fields = [s[i:i + 2] for i in range(0, len(s), 2)]
         return "".join(chr(int(b, 16)) for b in fields)
 
@@ -308,7 +308,6 @@ class DUOAdvertiser(IDM.Router):
 
     def adv(self, proxy, current):
         self.instance.adv(proxy, current)
-
         if not self.enabled:
             return
 
