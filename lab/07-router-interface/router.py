@@ -114,9 +114,14 @@ class RoutingTable(object):
         oid = self.ic.identityToString(oid)
         route = self.routes.get(oid, None)
 
+        # try to get router for that specific network
         if route is None:
             netid = oid[:2] + "*"
             route = self.routes.get(netid, None)
+
+        # or try to get the default router
+        if route is None:
+            route = self.router.get("*", None)
 
         if route is None:
             raise NoSuchRoute
@@ -186,8 +191,12 @@ class RouterI(IDM.Router):
     def flowAdd(self, flow, current):
         destination = self.address_to_string(flow.m.dst)
 
-        # add route for whole network
-        if destination[2:] == "00":
+        # add default route
+        if destination == "0000":
+            destination = "*"
+
+        # or add route for whole network
+        elif destination[2:] == "00":
             destination = destination[:2] + "*"
 
         try:
@@ -212,6 +221,8 @@ class RouterI(IDM.Router):
 
         rows = self.table.list()
         for destination, info in rows.items():
+            if destination == "*":
+                destination = "0000"
             addr = self.string_to_address(destination.replace("*", "00"))
             matcher = IDM.Routing.Matcher(addr)
             nextHop = "R -{}:{}".format(info[1], info[0])
@@ -309,10 +320,6 @@ class DUOAdvertiser(IDM.Router):
     def adv(self, proxy, current):
         self.instance.adv(proxy, current)
         if not self.enabled:
-            return
-
-        # do not advertise default routes
-        if "*" in proxy.split(" ")[0]:
             return
 
         addr = self.get_idm_addr(proxy)
