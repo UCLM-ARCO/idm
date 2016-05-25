@@ -3,6 +3,7 @@
 
 import sys
 import Ice
+import argparse
 
 Ice.loadSlice("src/idm.ice")
 import IDM
@@ -19,6 +20,9 @@ class ServantI(Ice.Object):
 
 class Server(Ice.Application):
     def run(self, args):
+        if not self.parse_args(args):
+            return 1
+
         ic = self.communicator()
 
         adapter = ic.createObjectAdapter("Adapter")
@@ -26,12 +30,25 @@ class Server(Ice.Application):
 
         oid = ic.getProperties().getProperty("IDM.Address")
         prx = adapter.add(ServantI(), ic.stringToIdentity(oid))
-        self.register_on_router(prx)
+
+        if not self.args.no_adv:
+            self.register_on_router(prx)
+
         print "Proxy: '{}'".format(prx)
 
         print "Waiting events..."
         self.shutdownOnInterrupt()
         ic.waitForShutdown()
+
+    def parse_args(self, args):
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--no-adv", action="store_true", help="do not advertise to router")
+
+        try:
+            self.args = parser.parse_args(args[1:])
+            return True
+        except SystemExit:
+            return False
 
     def register_on_router(self, proxy):
         ic = self.communicator()

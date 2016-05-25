@@ -121,7 +121,7 @@ class RoutingTable(object):
 
         # or try to get the default router
         if route is None:
-            route = self.router.get("*", None)
+            route = self.routes.get("*", None)
 
         if route is None:
             raise NoSuchRoute
