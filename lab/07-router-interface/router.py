@@ -169,6 +169,7 @@ class Forwarder(Ice.Blobject):
         while True:
             msg = self.queue.get()
             self.process_message(msg)
+            self.queue.task_done()
 
     def process_message(self, msg):
         try:
