@@ -53,7 +53,10 @@ class RoutingTable(object):
             try:
                 id = self.routes[destination][2]
             except KeyError:
-                id = len(self.routes)
+                id = 0
+                for r in self.routes.values():
+                    id = max(id, r[2])
+                id += 1
             self.routes[destination] = (endpoints, mode, id)
 
             # FIXME: store in a separate thread, once each 5 mins (or so)
