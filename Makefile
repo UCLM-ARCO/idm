@@ -19,6 +19,7 @@ install:
 
 	install -d $(DESTDIR)/usr/share/pyshared/idm/
 	install -m 444 src/libidm.py $(DESTDIR)/usr/share/pyshared/idm/
+	> $(DESTDIR)/usr/share/pyshared/idm/__init__.py
 
 
 .PHONY: test
