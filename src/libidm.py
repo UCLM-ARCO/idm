@@ -1,4 +1,3 @@
-#!/usr/bin/python3
 # -*- coding: utf-8; mode: python -*-
 
 import Ice
@@ -11,7 +10,7 @@ def stringToAddress(str_identity):
     str_identity = str_identity.replace(':', '')
 
     try:
-        retval = bytes.fromhex(str_identity)
+        retval = bytearray.fromhex(str_identity)
     except ValueError:
         raise ValueError(INVALID_ADDRESS.format(str_identity))
 
@@ -35,7 +34,10 @@ def addressToString(address):
     if len(address) < 2:
         raise ValueError(INVALID_ADDRESS.format(address))
 
-    return address.hex().upper()
+    # Only Python3 solution:
+    # return address.hex().upper()
+
+    return "".join("{:02x}".format(ord(c)) for c in address).upper()
 
 
 def assert_hex(text):

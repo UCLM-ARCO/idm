@@ -17,6 +17,9 @@ install:
 	install -d $(DESTDIR)/usr/share/slice/idm/
 	install -m 444 src/idm.ice $(DESTDIR)/usr/share/slice/idm/
 
+	install -d $(DESTDIR)/usr/share/pyshared/idm/
+	install -m 444 src/libidm.py $(DESTDIR)/usr/share/pyshared/idm/
+
 
 .PHONY: test
 test: OPTS ?= -eo
