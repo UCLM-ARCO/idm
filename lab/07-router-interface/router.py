@@ -50,13 +50,7 @@ class RoutingTable(object):
 
     def add(self, destination, endpoints, mode):
         with self.lock:
-            try:
-                id = self.routes[destination][2]
-            except KeyError:
-                id = 0
-                for r in self.routes.values():
-                    id = max(id, r[2])
-                id += 1
+            id = self.get_id_for(destination)
             self.routes[destination] = (endpoints, mode, id)
 
             # FIXME: store in a separate thread, once each 5 mins (or so)
@@ -74,7 +68,7 @@ class RoutingTable(object):
 
     def remove_by_id(self, id):
         with self.lock:
-            dst = self.find_id(id)
+            dst = self.find_by_id(id)
             if dst is None:
                 return None, None
 
@@ -82,11 +76,21 @@ class RoutingTable(object):
             self.remove(dst)
             return dst, info
 
-    def find_id(self, id):
+    def find_by_id(self, id):
         with self.lock:
             for dst, info in self.routes.items():
                 if info[2] == id:
                     return dst
+
+    def get_id_for(self, destination):
+        try:
+            id = self.routes[destination][2]
+        except KeyError:
+            id = 0
+            for r in self.routes.values():
+                id = max(id, r[2])
+            id += 1
+        return id
 
     def list(self):
         return self.routes
@@ -270,7 +274,7 @@ class RouterI(IDM.Router):
         return destination, endpoints, mode
 
     def address_to_string(self, a):
-        return "{:02X}{:02X}".format(*map(ord, a))
+        return "".join(["{:02X}".format(c) for c in map(ord, a)])
 
     def string_to_address(self, s):
         s = s.replace(":", "").strip('"')
