@@ -2,14 +2,24 @@
 
 module IDM {
 
-    sequence<byte> Address;
-
     module NeighborDiscovery {
 
 	interface Listener {
 	    void adv(string proxy);
-	    void bye(Address oid);
+	    void bye(string oid);
 	};
+    };
+
+    // struct Context:
+    //   int ttl;
+    //   string source;
+    dictionary<string, string> Context;
+
+    struct Message {
+      string destination;
+      string operation;
+      byteSeq inParams;
+      Context theContext;
     };
 
     module Routing {
@@ -17,7 +27,7 @@ module IDM {
         enum ActionType {Forward};
 
 	struct Matcher {
-	    Address dst;
+	    string address;
 	};
 
 	struct Action {
@@ -26,19 +36,19 @@ module IDM {
 	};
 
 	struct Flow {
-	  int identifier;
-	  Matcher m;
-	  Action a;
-	  // long idle_timeout;
-	  // Stats;
+	    int identifier;
+	    Matcher m;
+	    Action a;
+	    // long idle_timeout;
+	    // Stats;
 	};
 
 	sequence<Flow> FlowSeq;
 
 	interface RouterAdmin {
-	  void flowAdd(Flow f);
-	  void flowDelete(int identifier);
-	  FlowSeq flowList();
+	    void flowAdd(Flow f);
+	    void flowDelete(int identifier);
+	    FlowSeq flowList();
 	};
 
     };
@@ -46,4 +56,21 @@ module IDM {
     interface Router extends
 	Routing::RouterAdmin,
 	NeighborDiscovery::Listener {};
+
+    interface Controller {
+        void newNeighbor(string proxy, string routerAddr);
+        void newRouter(string proxy);
+        void matchingError(Message m);
+    };
 };
+
+
+
+
+
+
+
+
+
+
+
