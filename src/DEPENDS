@@ -1,1 +1,7 @@
-../lab/07-router-interface/DEPENDS
+ice-pyendpoint
+icec
+icec-rrp
+arduino-mk
+rrp
+ice-remoteio
+python-zeroc-ice
