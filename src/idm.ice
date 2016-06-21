@@ -2,6 +2,12 @@
 
 module IDM {
 
+    // struct Context:
+    //   int ttl;
+    //   string source;
+    dictionary<string, string> Context;
+    sequence<byte> byteSeq;
+
     module NeighborDiscovery {
 
         interface Listener {
@@ -9,11 +15,6 @@ module IDM {
             void bye(string oid);
         };
     };
-
-    // struct Context:
-    //   int ttl;
-    //   string source;
-    dictionary<string, string> Context;
 
     struct Message {
         string destination;

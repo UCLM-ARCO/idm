@@ -105,7 +105,7 @@ class RoutingTable(object):
                 destination, endpoints, mode = map(str.strip, line.split(" | "))
                 self.add(destination, endpoints, mode)
             except Exception:
-                logging.warn("Invalid line on routing table, ignoring...")
+                logging.warn(" invalid line on routing table, ignoring...")
 
     def store(self):
         header = ": DO NOT EDIT, it will be overwritten!\n"
@@ -149,10 +149,11 @@ class IncommingMessage(object):
 
 
 class Forwarder(Ice.Blobject):
-    def __init__(self, table, queue_size=10):
+    def __init__(self, table, controller, queue_size=10):
         self.table = table
+        self.controller = controller
         self.queue = Queue(maxsize=queue_size)
-        logging.info("Queue Size: {}".format(queue_size))
+        logging.info(" queue Size: {}".format(queue_size))
 
         # do forwarding on a separated thread
         t = Thread(target=self.forwarder_loop)
@@ -168,7 +169,7 @@ class Forwarder(Ice.Blobject):
         try:
             self.queue.put_nowait(msg)
         except Full:
-            logging.error("- could not forward message: full queue!")
+            logging.error(" - could not forward message: full queue!")
 
         return True, buffer("")
 
@@ -181,19 +182,31 @@ class Forwarder(Ice.Blobject):
     def process_message(self, msg):
         try:
             next = self.table.get_next(msg.oid)
-            logging.info("- forward to '{}'".format(next))
+            logging.info(" - forward to '{}'".format(next))
             next.ice_invoke(msg.operation, msg.mode, msg.in_params, msg.ctx)
 
         except NoSuchRoute:
             oid = Ice.identityToString(msg.oid)
-            logging.error("- no route to '{}'".format(oid))
+            logging.error(" - no route to '{}'".format(oid))
+            if self.controller is not None:
+                m = IDM.Message(Ice.identityToString(msg.oid),
+                                msg.operation,
+                                msg.in_params,
+                                msg.ctx)
+
+                def on_error(ex):
+                    logging.error(" something went wrong when calling controller: " + ex.reason)
+
+                self.controller.begin_matchingError(m, None, on_error)
+
         except Ice.Exception as e:
-            logging.error("- could not forward message: " + str(e))
+            logging.error(" - could not forward message: " + str(e))
 
 
 class RouterI(IDM.Router):
-    def __init__(self, table, ic):
+    def __init__(self, table, controller, ic):
         self.table = table
+        self.controller = controller
         self.ic = ic
 
     def flowAdd(self, flow, current):
@@ -210,10 +223,10 @@ class RouterI(IDM.Router):
         try:
             _, endpoints, mode = self.get_proxy_info(flow.a.next)
         except Ice.Exception as e:
-            logging.error("- could not add flow: " + str(e))
+            logging.error(" - could not add flow: " + str(e))
             return
 
-        logging.info("- flowAdd for '{}', dst: {}".format(destination, flow.a.next))
+        logging.info(" - flowAdd for '{}', dst: {}".format(destination, flow.a.next))
         self.table.add(destination, endpoints, mode)
 
     def flowDelete(self, identifier, current):
@@ -221,10 +234,10 @@ class RouterI(IDM.Router):
         rule = " not exists!"
         if dst is not None:
             rule = ": {} | {} | {}".format(dst, info[0], info[1])
-        logging.info("- flowDelete of {}, rule{}".format(identifier, rule))
+        logging.info(" - flowDelete of {}, rule{}".format(identifier, rule))
 
     def flowList(self, current):
-        logging.info("- flowList done")
+        logging.info(" - flowList done")
         flows = []
 
         rows = self.table.list()
@@ -244,15 +257,18 @@ class RouterI(IDM.Router):
         try:
             destination, endpoints, mode = self.get_proxy_info(proxy)
         except Ice.Exception as e:
-            logging.error("- invalid adv: " + str(e))
+            logging.error(" - invalid adv: " + str(e))
             return
 
-        logging.info("- adv from '{}'".format(proxy))
+        logging.info(" - adv from '{}'".format(proxy))
         self.table.add(destination, endpoints, mode)
+        if self.controller is not None:
+            address = Ice.identityToString(current.id)
+            self.controller.newNeighbor(proxy, address)
 
     def bye(self, oid, current):
         stroid = self.address_to_string(oid)
-        logging.info("- bye from '{}'".format(stroid))
+        logging.info(" - bye from '{}'".format(stroid))
         self.table.remove(oid)
 
     def get_proxy_info(self, proxy):
@@ -273,10 +289,12 @@ class RouterI(IDM.Router):
 
         return destination, endpoints, mode
 
-    def address_to_string(self, a):
+    @staticmethod
+    def address_to_string(a):
         return "".join(["{:02X}".format(c) for c in map(ord, a)])
 
-    def string_to_address(self, s):
+    @staticmethod
+    def string_to_address(s):
         s = s.replace(":", "").strip('"')
         fields = [s[i:i + 2] for i in range(0, len(s), 2)]
         return "".join(chr(int(b, 16)) for b in fields)
@@ -300,7 +318,7 @@ class DUOAdvertiser(IDM.Router):
         mgr = IceStorm.TopicManagerPrx.checkedCast(mgr)
 
         if mgr is None:
-            logging.warn("DUO advertisements disabled")
+            logging.warn(" DUO advertisements disabled")
             return
 
         try:
@@ -312,7 +330,7 @@ class DUOAdvertiser(IDM.Router):
         try:
             pub.ice_ping()
         except Ice.NoEndpointException:
-            logging.warn("DUO advertisements disabled")
+            logging.warn(" DUO advertisements disabled")
             return
 
         self.enabled = True
@@ -343,6 +361,15 @@ class DUOAdvertiser(IDM.Router):
 
 
 class RouterServer(Ice.Application):
+    def __init__(self):
+        Ice.Application.__init__(self)
+
+        self.ic = None
+        self.adapter = None
+        self.controller = None
+        self.args = None
+        self.__theend = None
+
     def run(self, args):
         if not self.parse_args(args[1:]):
             return 1
@@ -350,36 +377,63 @@ class RouterServer(Ice.Application):
         if self.args.autokill is not None:
             self.__theend = AutoKill(self.args.autokill)
 
-        ic = self.communicator()
+        self.ic = self.communicator()
 
         try:
-            path = self.get_router_table_path(ic)
+            path = self.get_router_table_path(self.ic)
         except ValueError:
-            logging.error("Property 'Router.Table.Path' not set")
+            logging.error(" property 'Router.Table.Path' not set")
             return 1
 
-        table = RoutingTable(ic, path)
+        table = RoutingTable(self.ic, path)
 
-        adapter = ic.createObjectAdapter("Router.Adapter")
-        adapter.activate()
+        self.adapter = self.ic.createObjectAdapter("Router.Adapter")
+        self.adapter.activate()
 
-        srv = DUOAdvertiser(RouterI(table, ic))
+        self.create_controller()
+        proxies = self.register_servants(table)
+        self.register_router(proxies)
+
+        for p in proxies:
+            logging.info(" router at '{}'".format(p))
+        logging.info(" waiting events...")
+
+        self.shutdownOnInterrupt()
+        self.ic.waitForShutdown()
+        logging.info(" shutting down...")
+
+    def register_servants(self, table):
+        srv = DUOAdvertiser(RouterI(table, self.controller, self.ic))
         proxies = []
-        props = ic.getProperties()
+        props = self.ic.getProperties()
         queue_size = props.getPropertyWithDefault("Router.QueueSize", "10")
         oids = props.getPropertyWithDefault("Router.Ids", "Router")
 
         for oid in oids.split("|"):
-            oid = ic.stringToIdentity(oid.strip())
-            proxies.append(adapter.add(srv, oid))
-        adapter.addDefaultServant(Forwarder(table, queue_size), "")
+            oid = self.ic.stringToIdentity(oid.strip())
+            proxies.append(self.adapter.add(srv, oid))
+        self.adapter.addDefaultServant(Forwarder(table, self.controller, queue_size), "")
+        return proxies
+
+    def create_controller(self):
+        self.controller = self.ic.propertyToProxy("Router.Controller.Proxy")
+        try:
+            self.controller = IDM.ControllerPrx.checkedCast(self.controller)
+        except Ice.Exception as ex:
+            msg = str(ex).replace("\n", "\n" + 12 * " " + "> ")
+            logging.warn(" could not contact with controller: " + msg)
+            self.controller = None
+
+        if not self.controller:
+            logging.warn(" router controller not defined")
+            return
+
+    def register_router(self, proxies):
+        if self.controller is None:
+            return
 
         for p in proxies:
-            logging.info("Router at '{}'".format(p))
-        logging.info("Waiting events...")
-        self.shutdownOnInterrupt()
-        ic.waitForShutdown()
-        logging.info("Shutting down...")
+            self.controller.newRouter(str(p))
 
     def parse_args(self, args):
         parser = ArgumentParser()
@@ -391,7 +445,8 @@ class RouterServer(Ice.Application):
         except SystemExit:
             return False
 
-    def get_router_table_path(self, ic):
+    @staticmethod
+    def get_router_table_path(ic):
         path = get_property(ic, "Router.Table.Path")
         if not os.path.exists(path):
             os.mknod(path)
