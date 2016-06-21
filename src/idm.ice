@@ -16,10 +16,10 @@ module IDM {
     dictionary<string, string> Context;
 
     struct Message {
-      string destination;
-      string operation;
-      byteSeq inParams;
-      Context theContext;
+	string destination;
+	string operation;
+	byteSeq inParams;
+	Context theContext;
     };
 
     module Routing {
@@ -63,14 +63,3 @@ module IDM {
         void matchingError(Message m);
     };
 };
-
-
-
-
-
-
-
-
-
-
-
