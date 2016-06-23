@@ -15,7 +15,7 @@ class TestDefaultRouter(TestCase):
 
     def create_router_table(self):
         with file("test/idm-router.table", "w") as table:
-            route = "* | tcp -h 127.0.0.1 -p 7890 | t"
+            route = "0000 | FF01 | tcp -h 127.0.0.1 -p 7890 | t"
             table.write(route)
 
     def launch_router(self):

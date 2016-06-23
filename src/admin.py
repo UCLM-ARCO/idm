@@ -45,19 +45,13 @@ class IDMAdmin(Ice.Application):
 
         print(" #ID | Address | Destination\n" + "-" * 60)
         for f in sorted(flows, key=lambda x: x.identifier):
-            addr = self.address_to_string(f.m.dst)
-            print("{: 4d}:   {}  ->  {}".format(f.identifier, addr, f.a.next))
+            print("{: 4d}:   {}  ->  {}".format(f.identifier, f.m.address, f.a.next))
 
     def cmd_delete(self):
         self.router.flowDelete(self.args.flowid)
 
-    def address_to_string(self, a):
-        return "{:02X}{:02X}".format(*map(ord, a))
-
     def string_to_address(self, s):
-        s = s.replace(":", "")
-        fields = [s[i:i + 2] for i in range(0, len(s), 2)]
-        return "".join(chr(int(b, 16)) for b in fields)
+        return s.replace(":", "").strip()
 
     def create_proxies(self):
         ic = self.communicator()

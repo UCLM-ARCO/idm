@@ -38,6 +38,39 @@ class NoSuchRoute(Exception):
     pass
 
 
+class FlowInfo:
+    def __init__(self, destination, router_id, router_endps, mode, id=None):
+        self.destination = destination
+        self.router_id = router_id
+        self.router_endps = router_endps
+        self.mode = mode
+        self.id = id
+
+    @classmethod
+    def from_proxy(cls, proxy, destination=None):
+        router_id, router_endps, mode = cls.get_proxy_info(proxy)
+        if destination is None:
+            destination = router_id
+        return FlowInfo(destination, router_id, router_endps, mode)
+
+    @classmethod
+    def get_proxy_info(cls, proxy):
+        router_id = Ice.identityToString(proxy.ice_getIdentity())
+        router_id = router_id.replace(":", "").strip('" ').upper()
+        router_endps = ":".join(map(str, proxy.ice_getEndpoints()))
+
+        mode = "t"
+        if proxy.ice_isDatagram():
+            mode = "d"
+        elif proxy.ice_isOneway():
+            mode = "o"
+        return router_id, router_endps, mode
+
+    def __repr__(self):
+        return "{} | {} | {} | {}".format(
+            self.destination, self.router_id, self.router_endps, self.mode)
+
+
 class RoutingTable(object):
     def __init__(self, ic, path):
         self.ic = ic
@@ -48,10 +81,10 @@ class RoutingTable(object):
         with file(path) as src:
             self.proccess_file(src)
 
-    def add(self, destination, endpoints, mode):
+    def add(self, flow_info):
         with self.lock:
-            id = self.get_id_for(destination)
-            self.routes[destination] = (endpoints, mode, id)
+            flow_info.id = self.get_id_for(flow_info.destination)
+            self.routes[flow_info.destination] = flow_info
 
             # FIXME: store in a separate thread, once each 5 mins (or so)
             self.store()
@@ -70,25 +103,25 @@ class RoutingTable(object):
         with self.lock:
             dst = self.find_by_id(id)
             if dst is None:
-                return None, None
+                return None
 
             info = self.routes[dst]
             self.remove(dst)
-            return dst, info
+            return info
 
     def find_by_id(self, id):
         with self.lock:
             for dst, info in self.routes.items():
-                if info[2] == id:
+                if info.id == id:
                     return dst
 
     def get_id_for(self, destination):
         try:
-            id = self.routes[destination][2]
+            id = self.routes[destination].id
         except KeyError:
             id = 0
             for r in self.routes.values():
-                id = max(id, r[2])
+                id = max(id, r.id)
             id += 1
         return id
 
@@ -102,39 +135,39 @@ class RoutingTable(object):
                 continue
 
             try:
-                destination, endpoints, mode = map(str.strip, line.split(" | "))
-                self.add(destination, endpoints, mode)
+                destination, router_id, router_endps, mode = map(str.strip, line.split(" | "))
+                flow_info = FlowInfo(destination, router_id, router_endps, mode)
+                self.add(flow_info)
             except Exception:
                 logging.warn(" invalid line on routing table, ignoring...")
 
     def store(self):
         header = ": DO NOT EDIT, it will be overwritten!\n"
-        header += ": destination | endpoints | mode\n: " + "-" * 50 + "\n"
+        header += ": destination | routerId | endpoints | mode\n: " + "-" * 50 + "\n"
         with file(self.path, "w") as dst:
             dst.write(header)
             for destination in sorted(self.routes.keys()):
                 info = self.routes[destination]
-                line = "{} | {} | {}\n".format(destination, *info)
-                dst.write(line)
+                dst.write(str(info) + "\n")
 
     def get_next(self, oid):
         oid = self.ic.identityToString(oid)
-        route = self.routes.get(oid, None)
+        flow_info = self.routes.get(oid, None)
 
         # try to get router for that specific network
-        if route is None:
-            netid = oid[:2] + "*"
-            route = self.routes.get(netid, None)
+        if flow_info is None:
+            netid = oid[:2] + "00"
+            flow_info = self.routes.get(netid, None)
 
         # or try to get the default router
-        if route is None:
-            route = self.routes.get("*", None)
+        if flow_info is None:
+            flow_info = self.routes.get("0000", None)
 
-        if route is None:
+        if flow_info is None:
             raise NoSuchRoute
 
-        endps, mode = route[0], route[1]
-        proxy = self.ic.stringToProxy("{} -{}:{}".format(oid, mode, endps))
+        proxy = "{} -{}:{}".format(oid, flow_info.mode, flow_info.router_endps)
+        proxy = self.ic.stringToProxy(proxy)
         proxy = proxy.ice_encodingVersion(Ice.Encoding_1_0)
         return proxy
 
@@ -210,31 +243,24 @@ class RouterI(IDM.Router):
         self.ic = ic
 
     def flowAdd(self, flow, current):
-        destination = self.address_to_string(flow.m.dst)
-
-        # add default route
-        if destination == "0000":
-            destination = "*"
-
-        # or add route for whole network
-        elif destination[2:] == "00":
-            destination = destination[:2] + "*"
+        destination = flow.m.address
 
         try:
-            _, endpoints, mode = self.get_proxy_info(flow.a.next)
+            next_prx = self.ic.stringToProxy(flow.a.next)
+            flow_info = FlowInfo.from_proxy(next_prx, destination)
         except Ice.Exception as e:
             logging.error(" - could not add flow: " + str(e))
             return
 
         logging.info(" - flowAdd for '{}', dst: {}".format(destination, flow.a.next))
-        self.table.add(destination, endpoints, mode)
+        self.table.add(flow_info)
 
-    def flowDelete(self, identifier, current):
-        dst, info = self.table.remove_by_id(identifier)
-        rule = " not exists!"
-        if dst is not None:
-            rule = ": {} | {} | {}".format(dst, info[0], info[1])
-        logging.info(" - flowDelete of {}, rule{}".format(identifier, rule))
+    def flowDelete(self, id, current):
+        flow_info = self.table.remove_by_id(id)
+        rule = "not exists!"
+        if flow_info is not None:
+            rule = str(flow_info)
+        logging.info(" - flowDelete of {}, rule {}".format(id, rule))
 
     def flowList(self, current):
         logging.info(" - flowList done")
@@ -242,62 +268,31 @@ class RouterI(IDM.Router):
 
         rows = self.table.list()
         for destination, info in rows.items():
-            if destination == "*":
-                destination = "0000"
-            addr = self.string_to_address(destination.replace("*", "00"))
-            matcher = IDM.Routing.Matcher(addr)
-            nextHop = "R -{}:{}".format(info[1], info[0])
+            matcher = IDM.Routing.Matcher(destination)
+            nextHop = "{} -{}:{}".format(info.router_id, info.mode, info.router_endps)
             action = IDM.Routing.Action(IDM.Routing.ActionType.Forward, nextHop)
-            flow = IDM.Routing.Flow(info[2], matcher, action)
+            flow = IDM.Routing.Flow(info.id, matcher, action)
             flows.append(flow)
 
         return flows
 
     def adv(self, proxy, current):
         try:
-            destination, endpoints, mode = self.get_proxy_info(proxy)
+            flow_info = FlowInfo.from_proxy(self.ic.stringToProxy(proxy))
         except Ice.Exception as e:
             logging.error(" - invalid adv: " + str(e))
             return
 
         logging.info(" - adv from '{}'".format(proxy))
-        self.table.add(destination, endpoints, mode)
+        self.table.add(flow_info)
+
         if self.controller is not None:
             address = Ice.identityToString(current.id)
             self.controller.newNeighbor(proxy, address)
 
     def bye(self, oid, current):
-        stroid = self.address_to_string(oid)
-        logging.info(" - bye from '{}'".format(stroid))
+        logging.info(" - bye from '{}'".format(oid))
         self.table.remove(oid)
-
-    def get_proxy_info(self, proxy):
-        fields = proxy.split(" ")
-        destination = fields[0].replace(":", "").strip('"').upper()
-        if "*" in destination:
-            fields[0] = "dummy"
-
-        proxy = " ".join(fields)
-        proxy = self.ic.stringToProxy(proxy)
-        endpoints = ":".join(map(str, proxy.ice_getEndpoints()))
-
-        mode = "t"
-        if proxy.ice_isDatagram():
-            mode = "d"
-        elif proxy.ice_isOneway():
-            mode = "o"
-
-        return destination, endpoints, mode
-
-    @staticmethod
-    def address_to_string(a):
-        return "".join(["{:02X}".format(c) for c in map(ord, a)])
-
-    @staticmethod
-    def string_to_address(s):
-        s = s.replace(":", "").strip('"')
-        fields = [s[i:i + 2] for i in range(0, len(s), 2)]
-        return "".join(chr(int(b, 16)) for b in fields)
 
 
 # A Wrapper, to maintain it decoupled
@@ -339,9 +334,7 @@ class DUOAdvertiser(IDM.Router):
     def get_idm_addr(self, str_proxy):
         proxy = self.ic.stringToProxy(str_proxy)
         oid = proxy.ice_getIdentity()
-        oid = self.ic.identityToString(oid)
-        addr = [int(oid[0:2], 16), int(oid[2:4], 16)]
-        return addr
+        return self.ic.identityToString(oid)
 
     def adv(self, proxy, current):
         self.instance.adv(proxy, current)
