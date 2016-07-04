@@ -385,7 +385,12 @@ class RouterServer(Ice.Application):
 
         self.create_controller()
         proxies = self.register_servants(table)
-        self.register_router(proxies)
+
+        # NOTE: avoid publishing indirect proxies on Controller
+        if proxies:
+            oid = proxies[0].ice_getIdentity()
+            router = self.adapter.createDirectProxy(oid)
+            self.register_router(router)
 
         for p in proxies:
             logging.info(" router at '{}'".format(p))
@@ -421,12 +426,10 @@ class RouterServer(Ice.Application):
             logging.warn(" router controller not defined")
             return
 
-    def register_router(self, proxies):
-        if self.controller is None:
+    def register_router(self, proxy):
+        if self.controller is None or proxy is None:
             return
-
-        for p in proxies:
-            self.controller.newRouter(str(p))
+        self.controller.newRouter(str(proxy))
 
     def parse_args(self, args):
         parser = ArgumentParser()
