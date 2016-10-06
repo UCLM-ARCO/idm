@@ -2,8 +2,9 @@ Source: idm
 Section: net
 Priority: extra
 Maintainer: Oscar Aceña Herrera <oscaracena@gmail.com>
+Uploaders: David Villa Alises <David.Villa@gmail.com>
 Build-Depends: debhelper (>= 7.0.50~), python
-Standards-Version: 3.9.6
+Standards-Version: 3.9.8
 
 Package: idm
 Architecture: all
