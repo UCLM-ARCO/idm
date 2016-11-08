@@ -72,10 +72,11 @@ class FlowInfo:
 
 
 class RoutingTable(object):
-    def __init__(self, ic, path):
+    def __init__(self, ic, path, addresses):
         self.ic = ic
         self.path = path
         self.lock = RLock()
+        self.router_address = addresses
         self.routes = {}
 
         with file(path) as src:
@@ -154,6 +155,11 @@ class RoutingTable(object):
         oid = self.ic.identityToString(oid)
         flow_info = self.routes.get(oid, None)
 
+        # if not direct proxy, but is of our network: noSuchRoute
+        if flow_info is None and self.is_local_address(oid):
+            print("IS local address: {} -> {}".format(oid, self.router_address))
+            raise NoSuchRoute
+
         # try to get router for that specific network
         if flow_info is None:
             netid = oid[:2] + "00"
@@ -170,6 +176,12 @@ class RoutingTable(object):
         proxy = self.ic.stringToProxy(proxy)
         proxy = proxy.ice_encodingVersion(Ice.Encoding_1_0)
         return proxy
+
+    def is_local_address(self, oid):
+        for addr in self.router_address:
+            if oid[:2] == addr[:2]:
+                return True
+        return False
 
 
 class IncommingMessage(object):
@@ -378,7 +390,14 @@ class RouterServer(Ice.Application):
             logging.error(" property 'Router.Table.Path' not set")
             return 1
 
-        table = RoutingTable(self.ic, path)
+        # get this router's addresses and configure the routing table
+        # with it (used to avoid loops)
+        props = self.ic.getProperties()
+        addresses = props.getProperty("Router.Ids")
+        if addresses:
+            addresses = addresses.split("|")
+
+        table = RoutingTable(self.ic, path, addresses)
 
         self.adapter = self.ic.createObjectAdapter("Router.Adapter")
         self.adapter.activate()

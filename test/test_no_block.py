@@ -17,7 +17,7 @@ class TestReliability(TestCase):
     def launch_router(self):
         router = Task(desc="IDM router", detach=True)
         cmd = router.command('src/router.py --Ice.Config=test/idm-router.config')
-        router.assert_that(cmd.stderr.content, hamcrest.contains_string("adv from 'FF10 "))
+        router.assert_that(cmd.stderr.content, hamcrest.contains_string("adv from 'FA10 "))
 
     def launch_server(self, count):
         server = Task(desc="IDM server", detach=True)
@@ -26,4 +26,4 @@ class TestReliability(TestCase):
     def run_stress_client(self, count):
         client = Task(desc="IDM client")
         client.command(
-            "test/multi-ice-ping-client.py FF10 {} --Ice.Config=test/client.config".format(count))
+            "test/multi-ice-ping-client.py FA10 {} --Ice.Config=test/client.config".format(count))
