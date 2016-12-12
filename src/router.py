@@ -1,11 +1,11 @@
-#!/usr/bin/python -u
+#!/usr/bin/python3 -u
 # -*- mode: python; coding: utf-8 -*-
 
 import os
 import sys
 import Ice
 import IceStorm
-from Queue import Queue, Full
+from queue import Queue, Full
 from argparse import ArgumentParser
 from threading import RLock, Thread
 import logging
@@ -79,7 +79,7 @@ class RoutingTable(object):
         self.router_address = addresses
         self.routes = {}
 
-        with file(path) as src:
+        with open(path) as src:
             self.proccess_file(src)
 
     def add(self, flow_info):
@@ -112,7 +112,7 @@ class RoutingTable(object):
 
     def find_by_id(self, id):
         with self.lock:
-            for dst, info in self.routes.items():
+            for dst, info in list(self.routes.items()):
                 if info.id == id:
                     return dst
 
@@ -121,7 +121,7 @@ class RoutingTable(object):
             id = self.routes[destination].id
         except KeyError:
             id = 0
-            for r in self.routes.values():
+            for r in list(self.routes.values()):
                 id = max(id, r.id)
             id += 1
         return id
@@ -136,7 +136,7 @@ class RoutingTable(object):
                 continue
 
             try:
-                destination, router_id, router_endps, mode = map(str.strip, line.split(" | "))
+                destination, router_id, router_endps, mode = list(map(str.strip, line.split(" | ")))
                 flow_info = FlowInfo(destination, router_id, router_endps, mode)
                 self.add(flow_info)
             except Exception:
@@ -145,7 +145,7 @@ class RoutingTable(object):
     def store(self):
         header = ": DO NOT EDIT, it will be overwritten!\n"
         header += ": destination | routerId | endpoints | mode\n: " + "-" * 50 + "\n"
-        with file(self.path, "w") as dst:
+        with open(self.path, "w") as dst:
             dst.write(header)
             for destination in sorted(self.routes.keys()):
                 info = self.routes[destination]
@@ -157,7 +157,7 @@ class RoutingTable(object):
 
         # if not direct proxy, but is of our network: noSuchRoute
         if flow_info is None and self.is_local_address(oid):
-            print("IS local address: {} -> {}".format(oid, self.router_address))
+            print(("IS local address: {} -> {}".format(oid, self.router_address)))
             raise NoSuchRoute
 
         # try to get router for that specific network
@@ -190,14 +190,14 @@ class IncommingMessage(object):
         self.operation = current.operation
         self.mode = current.mode
         self.ctx = current.ctx.copy()
-        self.in_params = buffer(in_params[:])
+        self.in_params = bytes(in_params[:])
 
 
 class Forwarder(Ice.Blobject):
     def __init__(self, table, controller, queue_size=10):
         self.table = table
         self.controller = controller
-        self.queue = Queue(maxsize=queue_size)
+        self.queue = Queue(maxsize=int(queue_size))
         logging.info(" queue Size: {}".format(queue_size))
 
         # do forwarding on a separated thread
@@ -216,7 +216,7 @@ class Forwarder(Ice.Blobject):
         except Full:
             logging.error(" - could not forward message: full queue!")
 
-        return True, buffer("")
+        return True, bytes()
 
     def forwarder_loop(self):
         while True:
@@ -258,13 +258,13 @@ class RouterI(IDM.Router):
         destination = flow.m.address
 
         try:
-            next_prx = self.ic.stringToProxy(flow.a.next)
+            next_prx = self.ic.stringToProxy(flow.a.__next__)
             flow_info = FlowInfo.from_proxy(next_prx, destination)
         except Ice.Exception as e:
             logging.error(" - could not add flow: " + str(e))
             return
 
-        logging.info(" - flowAdd for '{}', dst: {}".format(destination, flow.a.next))
+        logging.info(" - flowAdd for '{}', dst: {}".format(destination, flow.a.__next__))
         self.table.add(flow_info)
 
     def flowDelete(self, id, current):
@@ -279,7 +279,7 @@ class RouterI(IDM.Router):
         flows = []
 
         rows = self.table.list()
-        for destination, info in rows.items():
+        for destination, info in list(rows.items()):
             matcher = IDM.Routing.Matcher(destination)
             nextHop = "{} -{}:{}".format(info.router_id, info.mode, info.router_endps)
             action = IDM.Routing.Action(IDM.Routing.ActionType.Forward, nextHop)

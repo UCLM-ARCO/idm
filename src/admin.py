@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- mode: python; coding: utf-8 -*-
 
 import os
@@ -43,9 +43,9 @@ class IDMAdmin(Ice.Application):
             print("No flows")
             return
 
-        print(" #ID | Address | Destination\n" + "-" * 60)
+        print((" #ID | Address | Destination\n" + "-" * 60))
         for f in sorted(flows, key=lambda x: x.identifier):
-            print("{: 4d}:   {}  ->  {}".format(f.identifier, f.m.address, f.a.next))
+            print(("{: 4d}:   {}  ->  {}".format(f.identifier, f.m.address, f.a.__next__)))
 
     def cmd_delete(self):
         self.router.flowDelete(self.args.flowid)

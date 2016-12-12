@@ -1,3 +1,9 @@
+idm (0.20161212-1) unstable; urgency=low
+
+  * Initial release for Python3
+
+ -- Oscar Aceña Herrera <oscaracena@gmail.com>  Mon, 12 Dec 2016 19:38:11 +0100
+
 idm (0.20161108-1) unstable; urgency=low
 
   * New release
