@@ -9,7 +9,7 @@ Standards-Version: 3.9.8
 Package: idm-py3
 Architecture: all
 Depends: ${misc:Depends}, python3, duo
-Replaces: idm-embedded
+Replaces: idm-embedded, idm
 Description: Inter Domain Messaging
  IDM is a protocol for communicating devices across different
  technologies. This package provides the router and some example
