@@ -32,7 +32,7 @@ module IDM {
         };
 
         struct Action {
-            ActionType action;
+            ActionType type;
             string next;
         };
 

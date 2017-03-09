@@ -14,11 +14,12 @@ logging.getLogger().setLevel(logging.INFO)
 
 
 def load_slice(name, parent=""):
-    path = os.path.join(os.path.dirname(__file__), name)
+    pwd = os.path.abspath(os.path.dirname(__file__))
+    path = os.path.join(pwd, name)
     if not os.path.exists(path):
         path = "/usr/share/slice/{}{}".format(parent, name)
 
-    Ice.loadSlice("{} -I{} -I/usr/share/slice --all".format(path, Ice.getSliceDir()))
+    Ice.loadSlice("{} -I{} -I{} -I/usr/share/slice --all".format(path, pwd, Ice.getSliceDir()))
 
 load_slice("idm.ice", "idm/")
 load_slice("duo_idm.ice", "duo/")
