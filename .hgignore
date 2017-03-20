@@ -4,3 +4,10 @@ syntax: glob
 *~
 *.o
 *.table
+
+.pioenvs
+.piolibdeps
+.clang_complete
+.gcc-flags.json
+
+lab/08-esp-router/lib/IceC
