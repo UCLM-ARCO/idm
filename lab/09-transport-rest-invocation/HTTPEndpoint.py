@@ -1,18 +1,30 @@
 # -*- mode: python; coding: utf-8 -*-
 
 import os
-from flask import Flask
+from flask import Flask, request
+from collections import deque
+from threading import Thread, Event
 
 from pyendpoint import (
     EndpointFactoryI,
     EndpointI,
     Acceptor,
+    TransceiverI,
+    ConnectionInfo,
 
     trace,
     log,
 )
 
 log.activated = True
+
+
+class EndpointInfo:
+    def __init__(self, protocol, host, port, oaEndpoint):
+        self.protocol = protocol
+        self.host = host
+        self.port = port
+        self.oaEndpoint = oaEndpoint
 
 
 class HTTPEndpointFactory(EndpointFactoryI):
@@ -32,19 +44,21 @@ class HTTPEndpointI(EndpointI):
     def initWithOptions(self, args, oaEndpoint):
         trace()
 
-        self.oaEndpoint = oaEndpoint
-        self.host = "0.0.0.0"
-        self.port = 8080
+        self._oaEndpoint = oaEndpoint
+        self._host = "0.0.0.0"
+        self._port = 8080
 
         if '-h' in args:
-            self.host = args[args.index('-h') + 1]
+            self._host = args[args.index('-h') + 1]
 
         if '-p' in args:
-            self.port = int(args[args.index('-p') + 1])
+            self._port = int(args[args.index('-p') + 1])
+
+        self._info = EndpointInfo(self._protocol, self._host, self._port, self._oaEndpoint)
 
     def options(self):
         trace()
-        return " -h {} -p {}".format(self.host, self.port)
+        return " -h {} -p {}".format(self._host, self._port)
 
     def transceiver(self):
         trace()
@@ -52,14 +66,14 @@ class HTTPEndpointI(EndpointI):
 
     def acceptor(self):
         trace()
-        return HTTPAcceptor(self._communicator, self._protocol)
+        return HTTPAcceptor(self._communicator, self._info)
 
     def endpoint(self, acceptor):
         trace()
 
         args = self.options().split()
         endp = HTTPEndpointI(self._communicator, self._protocol)
-        endp.initWithOptions(args, self.oaEndpoint)
+        endp.initWithOptions(args, self._oaEndpoint)
         return endp
 
 #     def connectors_async(self, callback):
@@ -74,89 +88,267 @@ class HTTPEndpointI(EndpointI):
 
 
 class HTTPAcceptor(Acceptor):
-    def __init__(self, communicator, protocol):
+    def __init__(self, communicator, info):
         trace()
 
         Acceptor.__init__(self)
         self._communicator = communicator
-        self._protocol = protocol
-
-        # self.client = None
-        # self.sock = socket.socket(type=socket.SOCK_STREAM)
-        # self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        # self.sock.bind(("127.0.0.1", 9000))
+        self._info = info
+        self._request = None
 
     def listen(self):
         trace()
 
-        # self.sock.listen(1)
-        # self._fd = self.sock.fileno()
-
         self.create_flask_app()
-        self.pipe_r, self.pipe_w = os.pipe()
-        self._fd = self.pipe_r
+        self._pipe_r, self._pipe_w = os.pipe()
+        self._fd = self._pipe_r
 
     def close(self):
         trace()
-        os.close(self.pipe_r)
-        os.close(self.pipe_w)
+        os.close(self._pipe_r)
+        os.close(self._pipe_w)
 
-#     def accept(self):
-#         trace()
-
-#         self.client, addr = self.sock.accept()
-#         self._fd = self.client.fileno()
-#         return TwowayTransceiverI(self._communicator, self._protocol, self.client, True)
+    def accept(self):
+        trace()
+        self._request.accept()
+        return HTTPTransceiverI(self._communicator, self._info, self._request, True)
 
     def create_flask_app(self):
-        self.flask_app = Flask(__name__)
+        self._flask_app = Flask(__name__)
+
+        @self._flask_app.route('/<identity>/<method>', methods=["GET"])
+        def get_request(identity, method):
+            self._request = PendingRequest(self, identity, method)
+            self._request.notify()
+            return self._request.wait_response()
+
+        @self._flask_app.route('/<identity>/<method>/<int:id>', methods=["GET"])
+        def get_by_id_request(identity, method, id):
+            self._request = PendingRequest(self, identity, method, id)
+            self._request.notify()
+            return self._request.wait_response()
+
+        @self._flask_app.route('/<identity>/<method>', methods=["POST"])
+        def add_request(identity, method):
+            self._request = PendingRequest(self, identity, method, params=request.json.copy())
+            self._request.notify()
+            return self._request.wait_response()
+
+        Thread(
+            target = self._flask_app.run,
+            kwargs = {'host': self._info.host, 'port': self._info.port, 'threaded': True},
+            daemon = True).start()
+
+    def toString(self):
+        return "{}:{}".format(self._info.host, self._info.port)
+
+    def toDetailedString(self):
+        return "base url = http://{}:{}/".format(self._info.host, self._info.port)
+
+
+class PendingRequest:
+    TOKEN = b"wakeup"
+
+    def __init__(self, acceptor, identity, method, id=None, params=None):
+        trace()
+
+        self.acceptor = acceptor
+        self.ready = Event()
+        self.ice_message = b""
+        self.response = b"<unknown>"
+        self.response_code = 400
+
+        self.build_ice_message(identity, method, id)
+
+    def notify(self):
+        trace()
+        os.write(self.acceptor._pipe_w, self.TOKEN)
+
+    def accept(self):
+        trace()
+        assert(os.read(self.acceptor._pipe_r, len(self.TOKEN)) == self.TOKEN)
+
+    def build_ice_message(self, identity, method, id):
+        trace()
+
+        # struct HeaderData
+        header = [
+            73, 99, 101, 80,            # int  magic
+            1,                          # byte protocolMajor
+            0,                          # byte protocolMinor
+            1,                          # byte encodingMajor
+            0,                          # byte encodingMinor
+            0,                          # byte messageType - 0: request
+            0,                          # byte compressionStatus - 0: no compression
+            0, 0, 0, 0,                 # int  messageSize - placeholder
+        ]
+
+        # struct RequestData
+        body = [
+            1, 0, 0, 0,                 # int requestId - x, not reused connection
+            * self.pack_oid(identity),  # Ice::Identity id
+            0,                          # Ice::StringSeq facet - 0: no facet
+            * self.pack_str(method),    # string operation
+            0,                          # byte mode - 0: normal
+            0,                          # Ice::Context context - 0: no context
+        ]
+
+        # encapsulation params
+        encap = [
+            0, 0, 0, 0,                 # int size - placeholder
+            1,                          # byte major
+            0,                          # byte minor
+        ]
+
+        # if 'id' is given, include it on params (as an integer)
+        if id is not None:
+            encap += self.pack_int(int(id))
+
+        # FIXME: append params to encap
+
+        # update sizes
+        encap[:4] = self.pack_int(len(encap))
+        header[10:14] = self.pack_int(len(header) + len(body) + len(encap))
+        self.ice_message = bytes(header + body + encap)
+
+    def pack_oid(self, name):
+        return self.pack_str(name) + [0]
+
+    def pack_str(self, s):
+        return [len(s)] + list(bytes(s, "utf-8"))
+
+    def pack_int(self, i):
+        return [i & 0xff, (i >> 8) & 0xff, (i >> 16) & 0xff, (i >> 24) & 0xff]
+
+    def wait_response(self):
+        trace()
+        self.ready.wait()
+        return self.response, self.response_code
+
+    def set_response(self, buff):
+        trace()
+
+        # validate message header
+        header = [73, 99, 101, 80, 1, 0, 1, 0, 2, 0]
+        assert (list(buff[:len(header)]) == header), "Invalid message format on reply!"
+        i = len(header) + 4 + 4  # header + size + requestId
+
+        # check reply status
+        status = buff[i]
+        i += 1
+
+        # ok, get response (if any), only string supported, no out params supported
+        if status == 0:
+            i += 6  # encap size + major + minor
+            size = buff[i]
+
+            i += 1  # string size
+            if size == 255:
+                size = buff[i] << 24 + buff[i + 1] << 16 + buff[i + 2] << 8 + buff[i + 3]
+                i += 4
+
+            self.response = bytes(buff[i:])
+            self.response_code = 200
+
+        elif status == 1:
+            self.response = "ERROR: User exception"
+        elif status == 2:
+            self.response = "ERROR: Object does not exist"
+            self.response_code = 404
+        elif status == 3:
+            self.response = "ERROR: Facet does not exist"
+            self.response_code = 404
+        elif status == 4:
+            self.response = "ERROR: Operation does not exist"
+            self.response_code = 404
+        elif status in [5, 6, 7]:
+            i += 5 if buff[i] == 255 else 1
+            self.response = b"ERROR: Exception raised:\n------\n\n" + bytes(buff[i:])
+
+        self.ready.set()
+
+    def size(self):
+        trace()
+        return len(self.ice_message)
+
+    def write_into(self, buff):
+        trace()
+        size = min(len(buff), len(self.ice_message))
+        buff[:size] = self.ice_message
+        self.ice_message = self.ice_message[size:]
+
+        return size
 
 
 # class TwowayConnectorI(ConnectorI):
 #     def __init__(self, communicator, protocol):
 #         trace()
 #         ConnectorI.__init__(self, communicator, protocol)
-#         self.sock = socket.socket(type=socket.SOCK_STREAM)
+#         self._sock = socket.socket(type=socket.SOCK_STREAM)
 
 #     def connect(self):
 #         trace()
-#         self.sock.connect(("127.0.0.1", 9000))
-#         return TwowayTransceiverI(self._communicator, self._protocol, self.sock, False)
+#         self._sock.connect(("127.0.0.1", 9000))
+#         return TwowayTransceiverI(self._communicator, self._protocol, self._sock, False)
 
-# class TwowayTransceiverI(TransceiverI):
-#     def __init__(self, communicator, protocol, sock, incoming=False):
-#         trace()
 
-#         TransceiverI.__init__(self, communicator, protocol, fd=sock.fileno())
-#         self.incoming = incoming
-#         self.sock = sock
+class HTTPTransceiverI(TransceiverI):
+    def __init__(self, communicator, info, request, incoming=False):
+        trace()
 
-#     def toString(self):
-#         trace()
-#         return "twowayEndp -h 127.0.0.1 -p 9000"
+        TransceiverI.__init__(self, communicator, info.protocol)
+        self._info = info
+        self._incoming = incoming
+        self._request = request
+        self._validated = False
 
-#     def getInfo(self):
-#         trace()
-#         adapterName = ""
-#         connectionId = ""
-#         return ConnectionInfo(self.incoming, adapterName, connectionId)
+        self._pipe_r, self._pipe_w = os.pipe()
+        self._fd = self._pipe_r
 
-#     def closing(self, initiator):
-#         trace()
-#         return initiator
+    def toString(self):
+        trace()
+        return "{} -h {} -p {}".format(
+            self._info.protocol, self._info.host, self._info.port)
 
-#     def write(self, buff):
-#         trace()
+    def getInfo(self):
+        trace()
+        adapterName = ""
+        connectionId = ""
+        return ConnectionInfo(self._incoming, adapterName, connectionId)
 
-#         self.sock.send(buff)
-#         return True
+    def closing(self, initiator):
+        trace()
+        return initiator
 
-#     def read(self, buff):
-#         trace()
+    def write(self, buff):
+        trace()
 
-#         size = self.sock.recv_into(buff, len(buff))
-#         return True, size
+        # first message sent is a validate connection, ack it
+        if not self._validated:
+            validate_msg = [73, 99, 101, 80, 1, 0, 1, 0, 3, 0, 14, 0, 0, 0]
+            assert (list(buff) == validate_msg), "Invalid validation message!"
+            self._validated = True
 
-#     def close(self):
-#         trace()
-#         self.sock.close()
+            # notify IC that we have a pending message
+            os.write(self._pipe_w, PendingRequest.TOKEN)
+
+            return True
+
+        # otherwise, is a reply
+        self._request.set_response(buff)
+        return True
+
+    def read(self, buff):
+        trace()
+        size = self._request.write_into(buff)
+
+        # remove notification if message is sent completly
+        if self._request.size() == 0:
+            os.read(self._pipe_r, len(PendingRequest.TOKEN))
+
+        return True, size
+
+    def close(self):
+        trace()
+        os.close(self._pipe_r)
+        os.close(self._pipe_w)

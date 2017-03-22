@@ -3,6 +3,8 @@
 
 import sys
 import Ice
+import json
+from pprint import pprint
 
 Ice.loadSlice("todo.ice")
 import ToDo
@@ -35,20 +37,14 @@ class Client(Ice.Application):
         self.print_tasks(todo_list)
 
         # ACTIONS: remove, list
-        print(" - remove task 1")
-        todo_list.delete(task1.id)
-        self.print_tasks(todo_list)
+        # print(" - remove task 1")
+        # todo_list.delete(task1.id)
+        # self.print_tasks(todo_list)
 
     def print_tasks(self, todo_list):
-        print(" - items:", [self.str_task(t) for t in todo_list.getAll()])
-
-    def str_task(self, task):
-        return "<id: {}, title: '{}', desc: '{}', done: {}>".format(
-            task.id,
-            task.title[:10] + "..." if len(task.title) > 10 else task.title,
-            task.description[:10] + "..." if len(task.description) > 10 else task.description,
-            task.done)
-
+        items = json.loads(todo_list.getAll())
+        print(" - items: ")
+        pprint(items, indent=4)
 
 
 if __name__ == "__main__":

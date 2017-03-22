@@ -9,11 +9,9 @@ module ToDo {
 	bool done;
     };
 
-    sequence<Task> TaskSeq;
-
     interface List {
-	TaskSeq getAll();
-	Task get(int id);
+	string getAll();       // returns Task sequence on JSON format
+	string get(int id);    // returns Task on JSON formar
 	void add(Task t);
 	void update(Task t);
 	void delete(int id);
