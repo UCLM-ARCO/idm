@@ -2,7 +2,8 @@
 
 import os
 from flask import Flask, request
-from collections import deque
+from flask.json import JSONDecoder
+from collections import deque, OrderedDict
 from threading import Thread, Event
 
 from pyendpoint import (
@@ -16,7 +17,7 @@ from pyendpoint import (
     log,
 )
 
-log.activated = True
+log.activated = False
 
 
 class EndpointInfo:
@@ -116,21 +117,28 @@ class HTTPAcceptor(Acceptor):
     def create_flask_app(self):
         self._flask_app = Flask(__name__)
 
+        def OrderedDictJSONDecoder(*args, **kwargs):
+            kwargs['object_pairs_hook'] = OrderedDict
+            return JSONDecoder(*args, **kwargs)
+
+        self._flask_app.json_decoder = OrderedDictJSONDecoder
+
         @self._flask_app.route('/<identity>/<method>', methods=["GET"])
         def get_request(identity, method):
-            self._request = PendingRequest(self, identity, method)
+            self._request = PendingRequest(self, identity, method, success_code=200)
             self._request.notify()
             return self._request.wait_response()
 
-        @self._flask_app.route('/<identity>/<method>/<int:id>', methods=["GET"])
-        def get_by_id_request(identity, method, id):
-            self._request = PendingRequest(self, identity, method, id)
+        @self._flask_app.route('/<identity>/<method>/<int:item>', methods=["GET"])
+        def get_by_id_request(identity, method, item):
+            self._request = PendingRequest(self, identity, method, item, success_code=200)
             self._request.notify()
             return self._request.wait_response()
 
         @self._flask_app.route('/<identity>/<method>', methods=["POST"])
         def add_request(identity, method):
-            self._request = PendingRequest(self, identity, method, params=request.json.copy())
+            self._request = PendingRequest(
+                self, identity, method, params=request.get_json(), success_code=201)
             self._request.notify()
             return self._request.wait_response()
 
@@ -149,16 +157,17 @@ class HTTPAcceptor(Acceptor):
 class PendingRequest:
     TOKEN = b"wakeup"
 
-    def __init__(self, acceptor, identity, method, id=None, params=None):
+    def __init__(self, acceptor, identity, method, item=None, params={}, success_code=200):
         trace()
 
         self.acceptor = acceptor
         self.ready = Event()
         self.ice_message = b""
         self.response = b"<unknown>"
+        self.success_code = success_code
         self.response_code = 400
 
-        self.build_ice_message(identity, method, id)
+        self.build_ice_message(identity, method, item, params)
 
     def notify(self):
         trace()
@@ -168,7 +177,7 @@ class PendingRequest:
         trace()
         assert(os.read(self.acceptor._pipe_r, len(self.TOKEN)) == self.TOKEN)
 
-    def build_ice_message(self, identity, method, id):
+    def build_ice_message(self, identity, method, item, params):
         trace()
 
         # struct HeaderData
@@ -200,11 +209,17 @@ class PendingRequest:
             0,                          # byte minor
         ]
 
-        # if 'id' is given, include it on params (as an integer)
-        if id is not None:
-            encap += self.pack_int(int(id))
+        # if 'item' is given, include it on encapsulation (as an integer)
+        if item is not None:
+            encap += self.pack_int(int(item))
 
-        # FIXME: append params to encap
+        # append params (if any) to encapsulation
+        for k, v in params.items():
+            encap += {
+                int: self.pack_int,
+                str: self.pack_str,
+                bool: self.pack_bool
+            }[type(v)](v)
 
         # update sizes
         encap[:4] = self.pack_int(len(encap))
@@ -220,6 +235,9 @@ class PendingRequest:
     def pack_int(self, i):
         return [i & 0xff, (i >> 8) & 0xff, (i >> 16) & 0xff, (i >> 24) & 0xff]
 
+    def pack_bool(self, b):
+        return [1 if b else 0]
+
     def wait_response(self):
         trace()
         self.ready.wait()
@@ -229,9 +247,23 @@ class PendingRequest:
         trace()
 
         # validate message header
-        header = [73, 99, 101, 80, 1, 0, 1, 0, 2, 0]
+        header = [73, 99, 101, 80, 1, 0, 1, 0]
         assert (list(buff[:len(header)]) == header), "Invalid message format on reply!"
-        i = len(header) + 4 + 4  # header + size + requestId
+        i = len(header)
+
+        # process rest of message
+        if buff[i] == 2:
+            return self.parse_reply(buff, i + 1)
+        elif buff[i] == 4:
+            return self.parse_close_connection(buff, i + 1)
+
+    def parse_close_connection(self, buff, i):
+        pass
+
+    def parse_reply(self, buff, i):
+        assert buff[i] == 0, "ERROR: no compression supported!"
+
+        i += 1 + 4 + 4  # compression status + message size + requestId
 
         # check reply status
         status = buff[i]
@@ -239,16 +271,22 @@ class PendingRequest:
 
         # ok, get response (if any), only string supported, no out params supported
         if status == 0:
-            i += 6  # encap size + major + minor
-            size = buff[i]
 
-            i += 1  # string size
-            if size == 255:
-                size = buff[i] << 24 + buff[i + 1] << 16 + buff[i + 2] << 8 + buff[i + 3]
-                i += 4
+            # if first byte of encap size is 6, there is no return value
+            if buff[i] == 6:
+                self.response = b""
+            else:
+                i += 6  # encap size + major + minor
+                size = buff[i]
 
-            self.response = bytes(buff[i:])
-            self.response_code = 200
+                i += 1  # string size
+                if size == 255:
+                    size = buff[i] << 24 + buff[i + 1] << 16 + buff[i + 2] << 8 + buff[i + 3]
+                    i += 4
+
+                self.response = bytes(buff[i:])
+
+            self.response_code = self.success_code
 
         elif status == 1:
             self.response = "ERROR: User exception"
