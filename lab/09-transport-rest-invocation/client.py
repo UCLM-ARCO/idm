@@ -30,16 +30,16 @@ class Client(Ice.Application):
         todo_list.add(task1)
         self.print_tasks(todo_list)
 
-        # ACTIONS: update, list
+        # ACTIONS: update, get
         print(" - update task 1")
         task1.done = True
-        todo_list.add(task1)
-        self.print_tasks(todo_list)
+        todo_list.update(task1)
+        pprint(json.loads(todo_list.get(task1.id)), indent=4)
 
         # ACTIONS: remove, list
-        # print(" - remove task 1")
-        # todo_list.delete(task1.id)
-        # self.print_tasks(todo_list)
+        print(" - remove task 1")
+        todo_list.delete(task1.id)
+        self.print_tasks(todo_list)
 
     def print_tasks(self, todo_list):
         items = json.loads(todo_list.getAll())

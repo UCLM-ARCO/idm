@@ -142,6 +142,19 @@ class HTTPAcceptor(Acceptor):
             self._request.notify()
             return self._request.wait_response()
 
+        @self._flask_app.route('/<identity>/<method>', methods=["PUT"])
+        def update_request(identity, method):
+            self._request = PendingRequest(
+                self, identity, method, params=request.get_json(), success_code=200)
+            self._request.notify()
+            return self._request.wait_response()
+
+        @self._flask_app.route('/<identity>/<method>/<int:item>', methods=["DELETE"])
+        def delete_request(identity, method, item):
+            self._request = PendingRequest(self, identity, method, item, success_code=200)
+            self._request.notify()
+            return self._request.wait_response()
+
         Thread(
             target = self._flask_app.run,
             kwargs = {'host': self._info.host, 'port': self._info.port, 'threaded': True},
@@ -263,9 +276,8 @@ class PendingRequest:
     def parse_reply(self, buff, i):
         assert buff[i] == 0, "ERROR: no compression supported!"
 
-        i += 1 + 4 + 4  # compression status + message size + requestId
-
         # check reply status
+        i += 1 + 4 + 4  # compression + message size + requestId
         status = buff[i]
         i += 1
 
@@ -275,6 +287,8 @@ class PendingRequest:
             # if first byte of encap size is 6, there is no return value
             if buff[i] == 6:
                 self.response = b""
+                self.response_code = 204
+
             else:
                 i += 6  # encap size + major + minor
                 size = buff[i]
@@ -285,8 +299,7 @@ class PendingRequest:
                     i += 4
 
                 self.response = bytes(buff[i:])
-
-            self.response_code = self.success_code
+                self.response_code = self.success_code
 
         elif status == 1:
             self.response = "ERROR: User exception"

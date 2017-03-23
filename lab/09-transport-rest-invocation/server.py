@@ -26,7 +26,7 @@ class ListI(ToDo.List):
         self.tasks[task.id] = self.task_to_dict(task)
 
     def update(self, task, current):
-        print(" - update({})".format(task))
+        print(" - update({})".format(self.str_task(task)))
         self.tasks[task.id] = self.task_to_dict(task)
 
     def delete(self, task_id, current):
