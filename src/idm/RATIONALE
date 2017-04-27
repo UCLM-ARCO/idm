@@ -1,1 +1,2 @@
-Avoid the need to have IDM installed as a Debian package.
+Avoid the need to have IDM installed as a Debian package. DUO expects
+the file 'idm.ice' to be in 'idm/idm.ice'.
