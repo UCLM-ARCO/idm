@@ -6,10 +6,10 @@ Uploaders: David Villa Alises <David.Villa@gmail.com>
 Build-Depends: debhelper (>= 7.0.50~), python3
 Standards-Version: 3.9.8
 
-Package: idm-py3
+Package: idm
 Architecture: all
 Depends: ${misc:Depends}, python3, duo
-Replaces: idm-embedded, idm
+Replaces: idm-embedded, idm, idm-py3
 Description: Inter Domain Messaging
  IDM is a protocol for communicating devices across different
  technologies. This package provides the router and some example

@@ -22,7 +22,10 @@ install:
 	> $(DESTDIR)/usr/share/pyshared/idm/__init__.py
 
 
-.PHONY: test
+.PHONY: test clean
 test: OPTS ?= -eo
 test:
 	-prego $(OPTS) test/test_*.py
+
+clean:
+	$(MAKE) -C lab/08-esp-router/ $@

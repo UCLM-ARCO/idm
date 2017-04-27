@@ -1,3 +1,9 @@
+idm (0.20170427-1) unstable; urgency=low
+
+  * New release, rename 'idm-py3' back to 'idm'
+
+ -- Oscar Aceña Herrera <oscaracena@gmail.com>  Thu, 27 Apr 2017 10:24:32 +0200
+
 idm (0.20170309-1) unstable; urgency=low
 
   * New release
