@@ -29,6 +29,7 @@ module IDM {
 
         struct Matcher {
             string address;
+	    byte netmask;
         };
 
         struct Action {

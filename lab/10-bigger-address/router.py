@@ -3,13 +3,15 @@
 
 import os
 import sys
+import time
 import Ice
 import IceStorm
 from queue import Queue, Full
 from argparse import ArgumentParser
 from threading import RLock, Thread
-import logging
+from collections import OrderedDict
 
+import logging
 logging.getLogger().setLevel(logging.INFO)
 
 
@@ -27,6 +29,18 @@ import IDM
 import DUO
 
 
+MAX_ADDRESS_SIZE = 16  # given in bytes
+
+
+def expand_address(addr, netmask=MAX_ADDRESS_SIZE):
+    addr = int(netmask - len(addr) / 2) * "00" + addr
+    if len(addr) > MAX_ADDRESS_SIZE * 2:
+        raise ValueError("Invalid address: {}/{}".format(addr, netmask))
+    net = addr[:netmask * 2]
+    host = addr[netmask * 2:]
+    return net + int(MAX_ADDRESS_SIZE * 2 - len(addr)) * "0" + host
+
+
 def get_property(ic, name):
     props = ic.getProperties()
     value = props.getProperty(name)
@@ -40,19 +54,21 @@ class NoSuchRoute(Exception):
 
 
 class FlowInfo:
-    def __init__(self, destination, router_id, router_endps, mode, id=None):
-        self.destination = destination
+    def __init__(self, destination, netmask, router_id, router_endps, mode, id=None):
+        self.dst_oid = destination
+        self.destination = expand_address(destination, netmask)
+        self.netmask = netmask
         self.router_id = router_id
         self.router_endps = router_endps
         self.mode = mode
         self.id = id
 
     @classmethod
-    def from_proxy(cls, proxy, destination=None):
+    def from_proxy(cls, proxy, destination=None, netmask=MAX_ADDRESS_SIZE):
         router_id, router_endps, mode = cls.get_proxy_info(proxy)
         if destination is None:
             destination = router_id
-        return FlowInfo(destination, router_id, router_endps, mode)
+        return FlowInfo(destination, netmask, router_id, router_endps, mode)
 
     @classmethod
     def get_proxy_info(cls, proxy):
@@ -68,8 +84,8 @@ class FlowInfo:
         return router_id, router_endps, mode
 
     def __repr__(self):
-        return "{} | {} | {} | {}".format(
-            self.destination, self.router_id, self.router_endps, self.mode)
+        return "{} | {} | {} | {} | {}".format(
+            self.dst_oid, self.netmask, self.router_id, self.router_endps, self.mode)
 
 
 class RoutingTable(object):
@@ -77,8 +93,24 @@ class RoutingTable(object):
         self.ic = ic
         self.path = path
         self.lock = RLock()
-        self.router_address = addresses
-        self.routes = {}
+
+        # FIXME: use netmask size as sorting key
+        self.routes = OrderedDict()
+
+        self.router_address = []
+
+        # parse router addresses with netmasks
+        for addr in addresses:
+            netmask = 15
+            if "/" in addr:
+                addr, netmask = addr.split("/")
+                try:
+                    netmask = int(netmask)
+                    assert netmask >= 1 and netmask <= 16
+                except (ValueError, AssertionError):
+                    raise ValueError("Invalid netmask value, should be a number in range [1,16]")
+            addr = expand_address(addr)
+            self.router_address.append((addr, netmask))
 
         with open(path) as src:
             self.proccess_file(src)
@@ -87,16 +119,12 @@ class RoutingTable(object):
         with self.lock:
             flow_info.id = self.get_id_for(flow_info.destination)
             self.routes[flow_info.destination] = flow_info
-
-            # FIXME: store in a separate thread, once each 5 mins (or so)
             self.store()
 
     def remove(self, destination):
         with self.lock:
             try:
                 self.routes.pop(destination)
-
-                # FIXME: store in a separate thread, once each 5 mins (or so)
                 self.store()
             except KeyError:
                 pass
@@ -137,13 +165,15 @@ class RoutingTable(object):
                 continue
 
             try:
-                destination, router_id, router_endps, mode = list(map(str.strip, line.split(" | ")))
-                flow_info = FlowInfo(destination, router_id, router_endps, mode)
+                destination, netmask, router_id, router_endps, mode = \
+                    list(map(str.strip, line.split(" | ")))
+                flow_info = FlowInfo(destination, netmask, router_id, router_endps, mode)
                 self.add(flow_info)
             except Exception:
                 logging.warn(" invalid line on routing table, ignoring...")
 
     def store(self):
+        # FIXME: store in a separate thread, once each 5 mins (or so)
         header = ": DO NOT EDIT, it will be overwritten!\n"
         header += ": destination | routerId | endpoints | mode\n: " + "-" * 50 + "\n"
         with open(self.path, "w") as dst:
@@ -154,21 +184,24 @@ class RoutingTable(object):
 
     def get_next(self, oid):
         oid = self.ic.identityToString(oid)
-        flow_info = self.routes.get(oid, None)
+        dst = expand_address(oid)
+        flow_info = self.routes.get(dst, None)
 
-        # if not direct proxy, but is of our network: noSuchRoute
-        if flow_info is None and self.is_local_address(oid):
-            print(("IS local address: {} -> {}".format(oid, self.router_address)))
+        # if not direct proxy, but is on our network: noSuchRoute
+        if flow_info is None and self.is_local_address(dst):
             raise NoSuchRoute
 
         # try to get router for that specific network
         if flow_info is None:
-            netid = oid[:2] + "00"
-            flow_info = self.routes.get(netid, None)
+            for addr, info in self.routes.items():
+                bmask = info.netmask * 2
+                if dst[:bmask] == addr[:bmask]:
+                    flow_info = info
+                    break
 
         # or try to get the default router
         if flow_info is None:
-            flow_info = self.routes.get("0000", None)
+            flow_info = self.routes.get(MAX_ADDRESS_SIZE * "00", None)
 
         if flow_info is None:
             raise NoSuchRoute
@@ -178,9 +211,10 @@ class RoutingTable(object):
         proxy = proxy.ice_encodingVersion(Ice.Encoding_1_0)
         return proxy
 
-    def is_local_address(self, oid):
-        for addr in self.router_address:
-            if oid[:2] == addr[:2]:
+    def is_local_address(self, dst):
+        for addr, netmask in self.router_address:
+            bmask = netmask * 2
+            if dst[:bmask] == addr[:bmask]:
                 return True
         return False
 
@@ -257,15 +291,16 @@ class RouterI(IDM.Router):
 
     def flowAdd(self, flow, current):
         destination = flow.m.address
+        netmask = flow.m.netmask
 
         try:
-            next_prx = self.ic.stringToProxy(flow.a.__next__)
-            flow_info = FlowInfo.from_proxy(next_prx, destination)
+            next_prx = self.ic.stringToProxy(flow.a.next)
+            flow_info = FlowInfo.from_proxy(next_prx, destination, netmask)
         except Ice.Exception as e:
             logging.error(" - could not add flow: " + str(e))
             return
 
-        logging.info(" - flowAdd for '{}', dst: {}".format(destination, flow.a.__next__))
+        logging.info(" - flowAdd for '{}', dst: {}".format(destination, flow.a.next))
         self.table.add(flow_info)
 
     def flowDelete(self, id, current):
@@ -425,11 +460,14 @@ class RouterServer(Ice.Application):
         proxies = []
         props = self.ic.getProperties()
         queue_size = props.getPropertyWithDefault("Router.QueueSize", "10")
-        oids = props.getPropertyWithDefault("Router.Ids", "Router")
 
+        oids = props.getPropertyWithDefault("Router.Ids", "Router")
         for oid in oids.split("|"):
+            if "/" in oid:
+                oid = oid.split("/")[0]
             oid = self.ic.stringToIdentity(oid.strip())
             proxies.append(self.adapter.add(srv, oid))
+
         self.adapter.addDefaultServant(Forwarder(table, self.controller, queue_size), "")
         return proxies
 
@@ -477,7 +515,6 @@ class AutoKill(Thread):
         self.start()
 
     def run(self):
-        import time
         time.sleep(self.timeout)
         os.system('kill -9 {}'.format(os.getpid()))
 
