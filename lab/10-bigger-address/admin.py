@@ -37,9 +37,9 @@ class IDMAdmin(Ice.Application):
             addr, netmask = addr.split("/")
             try:
                 netmask = int(netmask)
-                assert netmask >= 1 and netmask <= 16
+                assert netmask >= 0 and netmask <= 128
             except (ValueError, AssertionError):
-                raise ValueError("Invalid netmask value, should be a number in range [1,16]")
+                raise ValueError("Invalid netmask value, should be a number in range [0,128]")
 
         matcher = IDM.Routing.Matcher(addr, netmask)
         action = IDM.Routing.Action(IDM.Routing.ActionType.Forward, self.args.route)

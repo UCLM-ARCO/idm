@@ -19,8 +19,8 @@ class TestTwoRouters(TestCase):
 
         self.run_node_1()
         self.run_client_to_node1()
-        self.run_router_2()
 
+        self.run_router_2()
         self.run_node_2()
         self.add_flows()
         self.run_client_to_node2()
@@ -85,7 +85,7 @@ class TestTwoRouters(TestCase):
     def add_flows(self):
         router1_prx = self.get_property("node1.config", "IDM.Router.Proxy")
         router2_prx = self.get_property("node2.config", "IDM.Router.Proxy")
-        rule = self.NODE2_ADDR[:4] + "/14"
+        rule = self.NODE2_ADDR[:4] + "/112"
         admin = Task("Add flows")
         admin.command(
             "./admin.py '{}' add {} '{}'".format(router1_prx, rule, router2_prx))

@@ -29,16 +29,28 @@ import IDM
 import DUO
 
 
-MAX_ADDRESS_SIZE = 16  # given in bytes
+MAX_ADDRESS_SIZE = 128  # given in bits
 
 
 def expand_address(addr, netmask=MAX_ADDRESS_SIZE):
-    addr = int(netmask - len(addr) / 2) * "00" + addr
-    if len(addr) > MAX_ADDRESS_SIZE * 2:
+    # addr = int(netmask - len(addr) / 2) * "00" + addr
+    # if len(addr) > MAX_ADDRESS_SIZE * 2:
+    #     raise ValueError("Invalid address: {}/{}".format(addr, netmask))
+    # net = addr[:netmask * 2]
+    # host = addr[netmask * 2:]
+    # return net + int(MAX_ADDRESS_SIZE * 2 - len(addr)) * "0" + host
+
+    print("[R]: @@@@@@@@@@ expand address")
+    return addr
+
+
+def get_bin_address(addr, netmask=MAX_ADDRESS_SIZE):
+    addr = int(addr, 16)
+    if (addr.bit_length() > MAX_ADDRESS_SIZE or netmask < 0 or netmask > MAX_ADDRESS_SIZE):
         raise ValueError("Invalid address: {}/{}".format(addr, netmask))
-    net = addr[:netmask * 2]
-    host = addr[netmask * 2:]
-    return net + int(MAX_ADDRESS_SIZE * 2 - len(addr)) * "0" + host
+
+    mask = ((1 << netmask) - 1) << (MAX_ADDRESS_SIZE - netmask)
+    return addr & mask
 
 
 def get_property(ic, name):
@@ -56,7 +68,7 @@ class NoSuchRoute(Exception):
 class FlowInfo:
     def __init__(self, destination, netmask, router_id, router_endps, mode, id=None):
         self.dst_oid = destination
-        self.destination = expand_address(destination, netmask)
+        self.destination = get_bin_address(destination, netmask)
         self.netmask = netmask
         self.router_id = router_id
         self.router_endps = router_endps
@@ -97,7 +109,7 @@ class RoutingTable(object):
         # FIXME: use netmask size as sorting key
         self.routes = OrderedDict()
 
-        self.router_address = []
+        self.router_networks = []
 
         # parse router addresses with netmasks
         for addr in addresses:
@@ -106,11 +118,11 @@ class RoutingTable(object):
                 addr, netmask = addr.split("/")
                 try:
                     netmask = int(netmask)
-                    assert netmask >= 1 and netmask <= 16
+                    assert netmask >= 0 and netmask <= 128
                 except (ValueError, AssertionError):
-                    raise ValueError("Invalid netmask value, should be a number in range [1,16]")
-            addr = expand_address(addr)
-            self.router_address.append((addr, netmask))
+                    raise ValueError("Invalid netmask value, should be a number in range [0,128]")
+            net = get_bin_address(addr, netmask)
+            self.router_networks.append((net, netmask))
 
         with open(path) as src:
             self.proccess_file(src)
@@ -184,26 +196,31 @@ class RoutingTable(object):
 
     def get_next(self, oid):
         oid = self.ic.identityToString(oid)
-        dst = expand_address(oid)
-        flow_info = self.routes.get(dst, None)
+        dst_net = get_bin_address(oid)
+        flow_info = self.routes.get(dst_net, None)
+
+        print("[R]: could {}use direct delivery".format("not " if flow_info is None else ""))
 
         # if not direct proxy, but is on our network: noSuchRoute
-        if flow_info is None and self.is_local_address(dst):
+        if flow_info is None and self.is_local_address(oid):
             raise NoSuchRoute
 
         # try to get router for that specific network
         if flow_info is None:
-            for addr, info in self.routes.items():
-                bmask = info.netmask * 2
-                if dst[:bmask] == addr[:bmask]:
+            print("[R]: there is a specific router?")
+            for router_net, info in self.routes.items():
+                dst_net = get_bin_address(oid, info.netmask)
+                if router_net == dst_net:
                     flow_info = info
                     break
 
         # or try to get the default router
         if flow_info is None:
+            print("[R]: -> no specific router\n[R]: default router?")
             flow_info = self.routes.get(MAX_ADDRESS_SIZE * "00", None)
 
         if flow_info is None:
+            print("[R]: -> no default router")
             raise NoSuchRoute
 
         proxy = "{} -{}:{}".format(oid, flow_info.mode, flow_info.router_endps)
@@ -212,10 +229,12 @@ class RoutingTable(object):
         return proxy
 
     def is_local_address(self, dst):
-        for addr, netmask in self.router_address:
-            bmask = netmask * 2
-            if dst[:bmask] == addr[:bmask]:
+        for router_net, netmask in self.router_networks:
+            dst_net = get_bin_address(dst, netmask)
+            if router_net == dst_net:
+                print("[R]: -> is local address")
                 return True
+        print("[R]: -> is NOT local address")
         return False
 
 
