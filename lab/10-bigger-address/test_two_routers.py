@@ -1,7 +1,7 @@
 # -*- mode: python; coding: utf-8 -*-
 
 import os
-from prego import TestCase, Task
+from prego import TestCase, Task, terminated
 from hamcrest import contains_string
 
 
@@ -10,20 +10,28 @@ class TestTwoRouters(TestCase):
     NODE2_ADDR = "BBCC0020"
     CLIENT_ADDR = "FFCC10"
 
+    # only one 'test_*' method to ensure order of execution
     def test_run(self):
-
         self.clean()
+
+        # direct deliver of an unknown node
         self.run_controller()
         self.run_router_1()
         self.run_client_to_unknown_node()
 
+        # direct delivery
         self.run_node_1()
         self.run_client_to_node1()
 
+        # indirect delivery
         self.run_router_2()
         self.run_node_2()
         self.add_flows()
         self.run_client_to_node2()
+
+        # bye of node, can't reach again
+        # self.stop_and_bye_node_1()
+        # self.run_client_to_missing_node1()
 
     def clean(self):
         for path in ["router1.table", "router2.table"]:
@@ -58,8 +66,8 @@ class TestTwoRouters(TestCase):
         )
 
     def run_node_1(self):
-        node1_t = Task("Node 1", detach=True)
-        self.node1 = node1_t.command(
+        self.node1_t = Task("Node 1", detach=True)
+        self.node1 = self.node1_t.command(
             "./node.py --Ice.Config=node1.config {}".format(self.NODE1_ADDR))
 
     def run_client_to_node1(self):
@@ -99,3 +107,18 @@ class TestTwoRouters(TestCase):
             self.node2.stdout.content,
             contains_string("set True from {}".format(self.CLIENT_ADDR))
         )
+
+    # def stop_and_bye_node_1(self):
+    #     stop = Task("Stop Node 1")
+    #     self.node1.terminate()
+    #     stop.wait_that(terminated(self.node1))
+
+    # def run_client_to_missing_node1(self):
+    #     client = Task("Client to Node 1 (which is missing)")
+    #     client.command(
+    #         "./client.py --Ice.Config=client.config {} {}".format(self.CLIENT_ADDR, self.NODE1_ADDR))
+
+    #     client.assert_that(
+    #         self.node1.stdout.content,
+    #         contains_string("set True from {}".format(self.CLIENT_ADDR))
+    #     )

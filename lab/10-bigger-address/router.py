@@ -32,18 +32,6 @@ import DUO
 MAX_ADDRESS_SIZE = 128  # given in bits
 
 
-def expand_address(addr, netmask=MAX_ADDRESS_SIZE):
-    # addr = int(netmask - len(addr) / 2) * "00" + addr
-    # if len(addr) > MAX_ADDRESS_SIZE * 2:
-    #     raise ValueError("Invalid address: {}/{}".format(addr, netmask))
-    # net = addr[:netmask * 2]
-    # host = addr[netmask * 2:]
-    # return net + int(MAX_ADDRESS_SIZE * 2 - len(addr)) * "0" + host
-
-    print("[R]: @@@@@@@@@@ expand address")
-    return addr
-
-
 def get_bin_address(addr, netmask=MAX_ADDRESS_SIZE):
     addr = int(addr, 16)
     if (addr.bit_length() > MAX_ADDRESS_SIZE or netmask < 0 or netmask > MAX_ADDRESS_SIZE):
@@ -217,7 +205,7 @@ class RoutingTable(object):
         # or try to get the default router
         if flow_info is None:
             print("[R]: -> no specific router\n[R]: default router?")
-            flow_info = self.routes.get(MAX_ADDRESS_SIZE * "00", None)
+            flow_info = self.routes.get(0, None)
 
         if flow_info is None:
             print("[R]: -> no default router")
