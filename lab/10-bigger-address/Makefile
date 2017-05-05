@@ -7,4 +7,4 @@ test:
 	prego -veo test_*.py
 
 clean:
-	$(RM) *~ *.pyc router?.table
+	$(RM) *~ *.pyc router?.table controller-saved-state.bin

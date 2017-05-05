@@ -4,6 +4,7 @@ syntax: glob
 *~
 *.o
 *.table
+*.bin
 
 .pioenvs
 .piolibdeps

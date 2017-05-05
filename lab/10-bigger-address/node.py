@@ -18,11 +18,21 @@ class IBoolI(DUO.IBool.W):
 
 class Node(Ice.Application):
     def run(self, args):
-        self.idm_address = args[1]
+        self.transient = False
+        self.idm_address = ""
+        self.parse_args(args)
 
         self.add_servant()
         self.register_on_router()
         self.event_loop()
+        self.unregister_from_router()
+
+    def parse_args(self, args):
+        for k in args[1:]:
+            if k == "--transient":
+                self.transient = True
+            else:
+                self.idm_address = k
 
     def add_servant(self):
         ic = self.communicator()
@@ -37,15 +47,19 @@ class Node(Ice.Application):
 
     def register_on_router(self):
         ic = self.communicator()
-        router = ic.propertyToProxy("IDM.Router.Proxy")
-        router = IDM.NeighborDiscovery.ListenerPrx.checkedCast(router)
+        self.router = ic.propertyToProxy("IDM.Router.Proxy")
+        self.router = IDM.NeighborDiscovery.ListenerPrx.checkedCast(self.router)
+        self.router.adv(ic.proxyToString(self.proxy))
 
-        router.adv(ic.proxyToString(self.proxy))
+    def unregister_from_router(self):
+        ic = self.communicator()
+        self.router.bye(ic.identityToString(self.proxy.ice_getIdentity()))
 
     def event_loop(self):
-        ic = self.communicator()
-        self.shutdownOnInterrupt()
-        ic.waitForShutdown()
+        if not self.transient:
+            ic = self.communicator()
+            self.shutdownOnInterrupt()
+            ic.waitForShutdown()
 
 
 if __name__ == "__main__":
