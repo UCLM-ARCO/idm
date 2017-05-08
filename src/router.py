@@ -34,6 +34,7 @@ DEFAULT_NETMASK = 120   # given in bits
 
 def get_bin_address(addr, netmask=MAX_ADDRESS_SIZE):
     addr = int(addr, 16)
+    netmask = int(netmask)
     if (addr.bit_length() > MAX_ADDRESS_SIZE or netmask < 0 or netmask > MAX_ADDRESS_SIZE):
         raise ValueError("Invalid address: {}/{}".format(addr, netmask))
 
@@ -102,7 +103,7 @@ class RouteDict:
 
     def __setitem__(self, dst, flow):
         self._keys.append((dst, flow.netmask))
-        self._keys.sort(key=lambda p: p[1], reverse=True)
+        self._keys.sort(key=lambda p: int(p[1]), reverse=True)
         self._items[dst] = flow
 
     def keys(self):
@@ -135,19 +136,21 @@ class RoutingTable(object):
                     netmask = int(netmask)
                     assert netmask >= 0 and netmask <= MAX_ADDRESS_SIZE
                 except (ValueError, AssertionError):
-                    raise ValueError("Invalid netmask value, should be a number in range [0,{}]".
-                                     format(MAX_ADDRESS_SIZE))
+                    raise ValueError(
+                        "Invalid netmask value, should be a number in range [0,{}]".
+                        format(MAX_ADDRESS_SIZE))
             net = get_bin_address(addr, netmask)
             self.router_networks.append((net, netmask))
 
         with open(path) as src:
             self.proccess_file(src)
 
-    def add(self, flow_info):
+    def add(self, flow_info, store=True):
         with self.lock:
             flow_info.id = self.get_id_for(flow_info.destination)
             self.routes[flow_info.destination] = flow_info
-            self.store()
+            if store:
+                self.store()
 
     def remove(self, destination):
         destination = get_bin_address(destination)
@@ -196,10 +199,12 @@ class RoutingTable(object):
             try:
                 destination, netmask, router_id, router_endps, mode = \
                     list(map(str.strip, line.split(" | ")))
-                flow_info = FlowInfo(destination, netmask, router_id, router_endps, mode)
-                self.add(flow_info)
-            except Exception:
+                flow_info = FlowInfo(
+                    destination, int(netmask), router_id, router_endps, mode)
+                self.add(flow_info, store=False)
+            except Exception as e:
                 logging.warn(" invalid line on routing table, ignoring...")
+                logging.warn("  - ex: {}".format(e))
 
     def store(self):
         # FIXME: store in a separate thread

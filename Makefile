@@ -29,3 +29,4 @@ test:
 
 clean:
 	$(MAKE) -C lab/08-esp-router/ $@
+	find -name "*.pyc" -print -delete
