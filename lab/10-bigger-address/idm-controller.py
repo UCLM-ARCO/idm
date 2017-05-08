@@ -86,12 +86,15 @@ class Network:
         if current.proxy and not self.proxy_equals(current.proxy, node.proxy):
             msg = " - there are two or more endpoints for router {}:\n".format(node.address)
             msg += node.proxy + "\n" + current.proxy
+            msg += "\nusing most recent one!"
             logging.warn(padstr(msg))
-            return False
+
+            # treat old router as a not managed
+            current.managed = False
 
         # if node wasn't managed and now it is, load its flows
+        current.proxy = node.proxy
         if not current.managed and node.managed:
-            current.proxy = node.proxy
             self.load_router_flows(current)
 
         current.managed = current.managed or node.managed

@@ -3,14 +3,15 @@
 
 import os
 import sys
+import time
 import Ice
 import IceStorm
 from queue import Queue, Full
 from argparse import ArgumentParser
 from threading import RLock, Thread
-import logging
 
-logging.getLogger().setLevel(logging.INFO)
+import logging
+logging.getLogger().setLevel(logging.DEBUG)
 
 
 def load_slice(name, parent=""):
@@ -27,6 +28,19 @@ import IDM
 import DUO
 
 
+MAX_ADDRESS_SIZE = 128  # given in bits
+DEFAULT_NETMASK = 120   # given in bits
+
+
+def get_bin_address(addr, netmask=MAX_ADDRESS_SIZE):
+    addr = int(addr, 16)
+    if (addr.bit_length() > MAX_ADDRESS_SIZE or netmask < 0 or netmask > MAX_ADDRESS_SIZE):
+        raise ValueError("Invalid address: {}/{}".format(addr, netmask))
+
+    mask = ((1 << netmask) - 1) << (MAX_ADDRESS_SIZE - netmask)
+    return addr & mask
+
+
 def get_property(ic, name):
     props = ic.getProperties()
     value = props.getProperty(name)
@@ -40,19 +54,21 @@ class NoSuchRoute(Exception):
 
 
 class FlowInfo:
-    def __init__(self, destination, router_id, router_endps, mode, id=None):
-        self.destination = destination
+    def __init__(self, destination, netmask, router_id, router_endps, mode, id=None):
+        self.dst_oid = destination
+        self.destination = get_bin_address(destination, netmask)
+        self.netmask = netmask
         self.router_id = router_id
         self.router_endps = router_endps
         self.mode = mode
         self.id = id
 
     @classmethod
-    def from_proxy(cls, proxy, destination=None):
+    def from_proxy(cls, proxy, destination=None, netmask=MAX_ADDRESS_SIZE):
         router_id, router_endps, mode = cls.get_proxy_info(proxy)
         if destination is None:
             destination = router_id
-        return FlowInfo(destination, router_id, router_endps, mode)
+        return FlowInfo(destination, netmask, router_id, router_endps, mode)
 
     @classmethod
     def get_proxy_info(cls, proxy):
@@ -68,8 +84,38 @@ class FlowInfo:
         return router_id, router_endps, mode
 
     def __repr__(self):
-        return "{} | {} | {} | {}".format(
-            self.destination, self.router_id, self.router_endps, self.mode)
+        return "{:X} | {} | {} | {} | {}".format(
+            self.destination, self.netmask, self.router_id, self.router_endps, self.mode)
+
+
+# use netmask size as sorting key
+class RouteDict:
+    def __init__(self):
+        self._items = {}
+        self._keys = []
+
+        self.values = self._items.values
+        self.get = self._items.get
+
+    def __getitem__(self, key):
+        return self._items[key]
+
+    def __setitem__(self, dst, flow):
+        self._keys.append((dst, flow.netmask))
+        self._keys.sort(key=lambda p: p[1], reverse=True)
+        self._items[dst] = flow
+
+    def keys(self):
+        return [x[0] for x in self._keys]
+
+    def items(self):
+        for p in self._keys:
+            yield p[0], self._items[p[0]]
+
+    def pop(self, dst):
+        retval = self._items.pop(dst)
+        self._keys.remove((dst, retval.netmask))
+        return retval
 
 
 class RoutingTable(object):
@@ -77,8 +123,22 @@ class RoutingTable(object):
         self.ic = ic
         self.path = path
         self.lock = RLock()
-        self.router_address = addresses
-        self.routes = {}
+        self.routes = RouteDict()
+        self.router_networks = []
+
+        # parse router addresses with netmasks
+        for addr in addresses:
+            netmask = DEFAULT_NETMASK
+            if "/" in addr:
+                addr, netmask = addr.split("/")
+                try:
+                    netmask = int(netmask)
+                    assert netmask >= 0 and netmask <= MAX_ADDRESS_SIZE
+                except (ValueError, AssertionError):
+                    raise ValueError("Invalid netmask value, should be a number in range [0,{}]".
+                                     format(MAX_ADDRESS_SIZE))
+            net = get_bin_address(addr, netmask)
+            self.router_networks.append((net, netmask))
 
         with open(path) as src:
             self.proccess_file(src)
@@ -87,16 +147,13 @@ class RoutingTable(object):
         with self.lock:
             flow_info.id = self.get_id_for(flow_info.destination)
             self.routes[flow_info.destination] = flow_info
-
-            # FIXME: store in a separate thread, once each 5 mins (or so)
             self.store()
 
     def remove(self, destination):
+        destination = get_bin_address(destination)
         with self.lock:
             try:
                 self.routes.pop(destination)
-
-                # FIXME: store in a separate thread, once each 5 mins (or so)
                 self.store()
             except KeyError:
                 pass
@@ -137,40 +194,50 @@ class RoutingTable(object):
                 continue
 
             try:
-                destination, router_id, router_endps, mode = list(map(str.strip, line.split(" | ")))
-                flow_info = FlowInfo(destination, router_id, router_endps, mode)
+                destination, netmask, router_id, router_endps, mode = \
+                    list(map(str.strip, line.split(" | ")))
+                flow_info = FlowInfo(destination, netmask, router_id, router_endps, mode)
                 self.add(flow_info)
             except Exception:
                 logging.warn(" invalid line on routing table, ignoring...")
 
     def store(self):
+        # FIXME: store in a separate thread
         header = ": DO NOT EDIT, it will be overwritten!\n"
         header += ": destination | routerId | endpoints | mode\n: " + "-" * 50 + "\n"
         with open(self.path, "w") as dst:
             dst.write(header)
-            for destination in sorted(self.routes.keys()):
-                info = self.routes[destination]
+            for destination, info in self.routes.items():
                 dst.write(str(info) + "\n")
 
     def get_next(self, oid):
         oid = self.ic.identityToString(oid)
-        flow_info = self.routes.get(oid, None)
+        dst_net = get_bin_address(oid)
+        flow_info = self.routes.get(dst_net, None)
 
-        # if not direct proxy, but is of our network: noSuchRoute
+        logging.debug(" could {}use direct delivery".format("not " if flow_info is None else ""))
+
+        # if not direct proxy, but is on our network: noSuchRoute
         if flow_info is None and self.is_local_address(oid):
-            print(("IS local address: {} -> {}".format(oid, self.router_address)))
             raise NoSuchRoute
 
         # try to get router for that specific network
         if flow_info is None:
-            netid = oid[:2] + "00"
-            flow_info = self.routes.get(netid, None)
+            logging.debug(" there is a specific router?")
+            for router_net, info in self.routes.items():
+                dst_net = get_bin_address(oid, info.netmask)
+                if router_net == dst_net:
+                    flow_info = info
+                    break
 
         # or try to get the default router
         if flow_info is None:
-            flow_info = self.routes.get("0000", None)
+            logging.debug(" - no specific router")
+            logging.debug(" default router?")
+            flow_info = self.routes.get(0, None)
 
         if flow_info is None:
+            logging.debug(" - no default router")
             raise NoSuchRoute
 
         proxy = "{} -{}:{}".format(oid, flow_info.mode, flow_info.router_endps)
@@ -178,10 +245,13 @@ class RoutingTable(object):
         proxy = proxy.ice_encodingVersion(Ice.Encoding_1_0)
         return proxy
 
-    def is_local_address(self, oid):
-        for addr in self.router_address:
-            if oid[:2] == addr[:2]:
+    def is_local_address(self, dst):
+        for router_net, netmask in self.router_networks:
+            dst_net = get_bin_address(dst, netmask)
+            if router_net == dst_net:
+                logging.debug(" - is local address")
                 return True
+        logging.debug(" - is NOT local address")
         return False
 
 
@@ -215,7 +285,7 @@ class Forwarder(Ice.Blobject):
         try:
             self.queue.put_nowait(msg)
         except Full:
-            logging.error(" - could not forward message: full queue!")
+            logging.error(" could not forward message: full queue!")
 
         return True, bytes()
 
@@ -228,12 +298,12 @@ class Forwarder(Ice.Blobject):
     def process_message(self, msg):
         try:
             next = self.table.get_next(msg.oid)
-            logging.info(" - forward to '{}'".format(next))
+            logging.info(" forward to '{}'".format(next))
             next.ice_invoke(msg.operation, msg.mode, msg.in_params, msg.ctx)
 
         except NoSuchRoute:
             oid = Ice.identityToString(msg.oid)
-            logging.error(" - no route to '{}'".format(oid))
+            logging.error(" no route to '{}'".format(oid))
             if self.controller is not None:
                 m = IDM.Message(Ice.identityToString(msg.oid),
                                 msg.operation,
@@ -246,7 +316,7 @@ class Forwarder(Ice.Blobject):
                 self.controller.begin_matchingError(m, None, on_error)
 
         except Ice.Exception as e:
-            logging.error(" - could not forward message: " + str(e))
+            logging.error(" could not forward message: " + str(e))
 
 
 class RouterI(IDM.Router):
@@ -257,15 +327,16 @@ class RouterI(IDM.Router):
 
     def flowAdd(self, flow, current):
         destination = flow.m.address
+        netmask = flow.m.netmask
 
         try:
-            next_prx = self.ic.stringToProxy(flow.a.__next__)
-            flow_info = FlowInfo.from_proxy(next_prx, destination)
+            next_prx = self.ic.stringToProxy(flow.a.next)
+            flow_info = FlowInfo.from_proxy(next_prx, destination, netmask)
         except Ice.Exception as e:
-            logging.error(" - could not add flow: " + str(e))
+            logging.error(" could not add flow: " + str(e))
             return
 
-        logging.info(" - flowAdd for '{}', dst: {}".format(destination, flow.a.__next__))
+        logging.info(" flowAdd for '{}/{}', dst: {}".format(destination, netmask, flow.a.next))
         self.table.add(flow_info)
 
     def flowDelete(self, id, current):
@@ -273,10 +344,10 @@ class RouterI(IDM.Router):
         rule = "not exists!"
         if flow_info is not None:
             rule = str(flow_info)
-        logging.info(" - flowDelete of {}, rule {}".format(id, rule))
+        logging.info(" flowDelete of {}, rule {}".format(id, rule))
 
     def flowList(self, current):
-        logging.info(" - flowList done")
+        logging.info(" flowList done")
         flows = []
 
         rows = self.table.list()
@@ -293,10 +364,10 @@ class RouterI(IDM.Router):
         try:
             flow_info = FlowInfo.from_proxy(self.ic.stringToProxy(proxy))
         except Ice.Exception as e:
-            logging.error(" - invalid adv: " + str(e))
+            logging.error(" invalid adv: " + str(e))
             return
 
-        logging.info(" - adv from '{}'".format(proxy))
+        logging.info(" adv from '{}'".format(proxy))
         self.table.add(flow_info)
 
         if self.controller is not None:
@@ -304,7 +375,7 @@ class RouterI(IDM.Router):
             self.controller.newNeighbor(proxy, address)
 
     def bye(self, oid, current):
-        logging.info(" - bye from '{}'".format(oid))
+        logging.info(" bye from '{}'".format(oid))
         self.table.remove(oid)
 
 
@@ -425,11 +496,14 @@ class RouterServer(Ice.Application):
         proxies = []
         props = self.ic.getProperties()
         queue_size = props.getPropertyWithDefault("Router.QueueSize", "10")
-        oids = props.getPropertyWithDefault("Router.Ids", "Router")
 
+        oids = props.getPropertyWithDefault("Router.Ids", "Router")
         for oid in oids.split("|"):
+            if "/" in oid:
+                oid = oid.split("/")[0]
             oid = self.ic.stringToIdentity(oid.strip())
             proxies.append(self.adapter.add(srv, oid))
+
         self.adapter.addDefaultServant(Forwarder(table, self.controller, queue_size), "")
         return proxies
 
@@ -477,7 +551,6 @@ class AutoKill(Thread):
         self.start()
 
     def run(self):
-        import time
         time.sleep(self.timeout)
         os.system('kill -9 {}'.format(os.getpid()))
 

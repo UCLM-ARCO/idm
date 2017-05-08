@@ -32,7 +32,16 @@ class IDMAdmin(Ice.Application):
 
     def cmd_add(self):
         addr = self.string_to_address(self.args.address)
-        matcher = IDM.Routing.Matcher(addr)
+        netmask = 15
+        if "/" in addr:
+            addr, netmask = addr.split("/")
+            try:
+                netmask = int(netmask)
+                assert netmask >= 0 and netmask <= 128
+            except (ValueError, AssertionError):
+                raise ValueError("Invalid netmask value, should be a number in range [0,128]")
+
+        matcher = IDM.Routing.Matcher(addr, netmask)
         action = IDM.Routing.Action(IDM.Routing.ActionType.Forward, self.args.route)
         flow = IDM.Routing.Flow(0, matcher, action)
         self.router.flowAdd(flow)
@@ -43,9 +52,9 @@ class IDMAdmin(Ice.Application):
             print("No flows")
             return
 
-        print((" #ID | Address | Destination\n" + "-" * 60))
+        print(" #ID | Address | Destination\n" + "-" * 60)
         for f in sorted(flows, key=lambda x: x.identifier):
-            print(("{: 4d}:   {}  ->  {}".format(f.identifier, f.m.address, f.a.__next__)))
+            print("{: 4d}:   {}  ->  {}".format(f.identifier, f.m.address, f.a.next))
 
     def cmd_delete(self):
         self.router.flowDelete(self.args.flowid)
@@ -64,7 +73,7 @@ class IDMAdmin(Ice.Application):
         subparsers = parser.add_subparsers(dest="action")
 
         parser_add = subparsers.add_parser("add", help="add a new flow")
-        parser_add.add_argument("address", help="matching address")
+        parser_add.add_argument("address", help="matching address (use /nnn for netmask)")
         parser_add.add_argument("route", help="next hop on route")
 
         subparsers.add_parser("list", help="list current flows")
