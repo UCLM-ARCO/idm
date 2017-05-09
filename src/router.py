@@ -20,7 +20,8 @@ def load_slice(name, parent=""):
     if not os.path.exists(path):
         path = "/usr/share/slice/{}{}".format(parent, name)
 
-    Ice.loadSlice("{} -I{} -I{} -I/usr/share/slice --all".format(path, pwd, Ice.getSliceDir()))
+    Ice.loadSlice("{} -I{} -I{} -I/usr/share/slice --all".format(
+        path, pwd, Ice.getSliceDir()))
 
 load_slice("idm.ice", "idm/")
 load_slice("duo_idm.ice", "duo/")
@@ -32,7 +33,7 @@ MAX_ADDRESS_SIZE = 128  # given in bits
 DEFAULT_NETMASK = 120   # given in bits
 
 
-def get_bin_address(addr, netmask=MAX_ADDRESS_SIZE):
+def get_net_address_bin(addr, netmask=MAX_ADDRESS_SIZE):
     addr = int(addr, 16)
     netmask = int(netmask)
     if (addr.bit_length() > MAX_ADDRESS_SIZE or netmask < 0 or netmask > MAX_ADDRESS_SIZE):
@@ -57,7 +58,7 @@ class NoSuchRoute(Exception):
 class FlowInfo:
     def __init__(self, destination, netmask, router_id, router_endps, mode, id=None):
         self.dst_oid = destination
-        self.destination = get_bin_address(destination, netmask)
+        self.destination = get_net_address_bin(destination, netmask)
         self.netmask = netmask
         self.router_id = router_id
         self.router_endps = router_endps
@@ -139,7 +140,7 @@ class RoutingTable(object):
                     raise ValueError(
                         "Invalid netmask value, should be a number in range [0,{}]".
                         format(MAX_ADDRESS_SIZE))
-            net = get_bin_address(addr, netmask)
+            net = get_net_address_bin(addr, netmask)
             self.router_networks.append((net, netmask))
 
         with open(path) as src:
@@ -153,7 +154,9 @@ class RoutingTable(object):
                 self.store()
 
     def remove(self, destination):
-        destination = get_bin_address(destination)
+        if isinstance(destination, (bytes, str)):
+            destination = get_net_address_bin(destination)
+
         with self.lock:
             try:
                 self.routes.pop(destination)
@@ -172,10 +175,9 @@ class RoutingTable(object):
             return info
 
     def find_by_id(self, id):
-        with self.lock:
-            for dst, info in list(self.routes.items()):
-                if info.id == id:
-                    return dst
+        for dst, info in list(self.routes.items()):
+            if info.id == id:
+                return dst
 
     def get_id_for(self, destination):
         try:
@@ -217,10 +219,11 @@ class RoutingTable(object):
 
     def get_next(self, oid):
         oid = self.ic.identityToString(oid)
-        dst_net = get_bin_address(oid)
+        dst_net = get_net_address_bin(oid)
         flow_info = self.routes.get(dst_net, None)
 
-        logging.debug(" could {}use direct delivery".format("not " if flow_info is None else ""))
+        logging.debug(" could {}use direct delivery".format(
+            "not " if flow_info is None else ""))
 
         # if not direct proxy, but is on our network: noSuchRoute
         if flow_info is None and self.is_local_address(oid):
@@ -230,7 +233,7 @@ class RoutingTable(object):
         if flow_info is None:
             logging.debug(" there is a specific router?")
             for router_net, info in self.routes.items():
-                dst_net = get_bin_address(oid, info.netmask)
+                dst_net = get_net_address_bin(oid, info.netmask)
                 if router_net == dst_net:
                     flow_info = info
                     break
@@ -252,7 +255,7 @@ class RoutingTable(object):
 
     def is_local_address(self, dst):
         for router_net, netmask in self.router_networks:
-            dst_net = get_bin_address(dst, netmask)
+            dst_net = get_net_address_bin(dst, netmask)
             if router_net == dst_net:
                 logging.debug(" - is local address")
                 return True
@@ -316,7 +319,8 @@ class Forwarder(Ice.Blobject):
                                 msg.ctx)
 
                 def on_error(ex):
-                    logging.error(" something went wrong when calling controller: " + ex.reason)
+                    logging.error(" something went wrong when calling controller: " +
+                                  ex.reason)
 
                 self.controller.begin_matchingError(m, None, on_error)
 
@@ -334,6 +338,9 @@ class RouterI(IDM.Router):
         destination = flow.m.address
         netmask = flow.m.netmask
 
+        logging.info(" flowAdd for '{}/{}', dst: {}".format(
+            destination, netmask, flow.a.next))
+
         try:
             next_prx = self.ic.stringToProxy(flow.a.next)
             flow_info = FlowInfo.from_proxy(next_prx, destination, netmask)
@@ -341,7 +348,6 @@ class RouterI(IDM.Router):
             logging.error(" could not add flow: " + str(e))
             return
 
-        logging.info(" flowAdd for '{}/{}', dst: {}".format(destination, netmask, flow.a.next))
         self.table.add(flow_info)
 
     def flowDelete(self, id, current):
@@ -357,7 +363,7 @@ class RouterI(IDM.Router):
 
         rows = self.table.list()
         for destination, info in list(rows.items()):
-            matcher = IDM.Routing.Matcher(destination)
+            matcher = IDM.Routing.Matcher(info.dst_oid, info.netmask)
             nextHop = "{} -{}:{}".format(info.router_id, info.mode, info.router_endps)
             action = IDM.Routing.Action(IDM.Routing.ActionType.Forward, nextHop)
             flow = IDM.Routing.Flow(info.id, matcher, action)
@@ -494,7 +500,9 @@ class RouterServer(Ice.Application):
 
         self.shutdownOnInterrupt()
         self.ic.waitForShutdown()
+
         logging.info(" shutting down...")
+        table.store()
 
     def register_servants(self, table):
         srv = DUOAdvertiser(RouterI(table, self.controller, self.ic))
