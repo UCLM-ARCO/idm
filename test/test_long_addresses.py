@@ -56,6 +56,13 @@ class TestAddressing(TestCase):
         self.add_flow('r1', self.NODE_ADDR[3] + "/115", 'r2')
         self.run_client_to_node(3, 'r1')
 
+    def test_default_route_0_as_netmask(self):
+        self.run_router(1)
+        self.run_router(2)
+        self.add_flow('r1', "0/0", 'r2')
+        self.run_node(1, 'server_r2')
+        self.run_client_to_node(1, 'r1')
+
     # -- below are just helper methods ---------------------------------------------
 
     def clean(cls):
