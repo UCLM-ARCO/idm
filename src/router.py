@@ -476,7 +476,7 @@ class RouterServer(Ice.Application):
         # get this router's addresses and configure the routing table
         # with it (used to avoid loops)
         props = self.ic.getProperties()
-        addresses = props.getProperty("Router.Ids")
+        addresses = props.getPropertyWithDefault("Router.Ids", "Router")
         if addresses:
             addresses = addresses.split("|")
 
@@ -486,13 +486,13 @@ class RouterServer(Ice.Application):
         self.adapter.activate()
 
         self.create_controller()
-        proxies = self.register_servants(table)
+        proxies = self.register_servants(table, addresses)
 
         # NOTE: avoid publishing indirect proxies on Controller
         if proxies:
             oid = proxies[0].ice_getIdentity()
             router = self.adapter.createDirectProxy(oid)
-            self.register_router(router)
+            self.register_router(router, addresses)
 
         for p in proxies:
             logging.info(" router at '{}'".format(p))
@@ -504,14 +504,13 @@ class RouterServer(Ice.Application):
         logging.info(" shutting down...")
         table.store()
 
-    def register_servants(self, table):
+    def register_servants(self, table, addresses):
         srv = DUOAdvertiser(RouterI(table, self.controller, self.ic))
         proxies = []
         props = self.ic.getProperties()
         queue_size = props.getPropertyWithDefault("Router.QueueSize", "10")
 
-        oids = props.getPropertyWithDefault("Router.Ids", "Router")
-        for oid in oids.split("|"):
+        for oid in addresses:
             if "/" in oid:
                 oid = oid.split("/")[0]
             oid = self.ic.stringToIdentity(oid.strip())
@@ -533,10 +532,10 @@ class RouterServer(Ice.Application):
             logging.warn(" router controller not defined")
             return
 
-    def register_router(self, proxy):
+    def register_router(self, proxy, domains):
         if self.controller is None or proxy is None:
             return
-        self.controller.newRouter(str(proxy))
+        self.controller.newRouter(str(proxy), domains)
 
     def parse_args(self, args):
         parser = ArgumentParser()

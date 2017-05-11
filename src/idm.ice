@@ -2,11 +2,9 @@
 
 module IDM {
 
-    // struct Context:
-    //   int ttl;
-    //   string source;
     dictionary<string, string> Context;
     sequence<byte> byteSeq;
+    sequence<string> stringSeq;
 
     module NeighborDiscovery {
 
@@ -41,8 +39,6 @@ module IDM {
             int identifier;
             Matcher m;
             Action a;
-            // long idle_timeout;
-            // Stats;
         };
 
         sequence<Flow> FlowSeq;
@@ -60,8 +56,8 @@ module IDM {
         NeighborDiscovery::Listener {};
 
     interface Controller {
-        void newNeighbor(string proxy, string routerAddr);
-        void newRouter(string proxy);
+        void newNeighbor(string proxy, string routerAddress);
+        void newRouter(string proxy, stringSeq addressList);
         void matchingError(Message m);
     };
 };
