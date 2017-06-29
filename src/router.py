@@ -211,7 +211,7 @@ class RoutingTable(object):
     def store(self):
         # FIXME: store in a separate thread
         header = ": DO NOT EDIT, it will be overwritten!\n"
-        header += ": destination | routerId | endpoints | mode\n: " + "-" * 50 + "\n"
+        header += ": destination | netmask | routerId | endpoints | mode\n: " + "-" * 50 + "\n"
         with open(self.path, "w") as dst:
             dst.write(header)
             for destination, info in self.routes.items():
