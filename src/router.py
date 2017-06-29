@@ -476,7 +476,7 @@ class RouterServer(Ice.Application):
         # get this router's addresses and configure the routing table
         # with it (used to avoid loops)
         props = self.ic.getProperties()
-        addresses = props.getPropertyWithDefault("Router.Ids", "Router")
+        addresses = props.getPropertyWithDefault("Router.Ids", "FF01")
         if addresses:
             addresses = addresses.split("|")
 
