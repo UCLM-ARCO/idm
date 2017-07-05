@@ -11,4 +11,23 @@ module IDM {
 	    void bye(Address oid);
 	};
     };
+
+    module Routing {
+
+      enum ActionType {Forward};
+
+      struct Matcher {
+	Address dst;
+      };
+
+      struct Action {
+	ActionType action;
+	string next;
+      };
+
+      interface Router {
+	void flowModify(Matcher m, Action a);
+      };
+
+    };
 };

@@ -1,0 +1,1169 @@
+\documentclass{arco-article}
+\usepackage{arco-acronym}
+\usepackage{arco-listings}
+
+\def \note #1 {}
+\newcommand{\function}[1]{\texttt{#1}}
+\newcommand{\iface}[1]{\textit{#1}}
+\newcommand{\id}[1]{\texttt{\textbf{\textscale{.90}{#1}}}}
+\newcommand{\fg}[1]{\textit{#1}}
+\newcommand{\code}[1]{{\texttt{#1}}}
+\newcommand{\seesec}[1]{(véase \S\,\ref{sec:#1})}
+
+
+\def \mw {middleware}
+\def \mws {middlewares}
+
+
+\usepackage{lettrine}
+\newcommand{\drop}[2]{%
+  \lettrine[lines=2,findent=2pt,nindent=0pt, loversize=0.25]% lhang=0.33
+  {\textcolor[gray]{0.4}{#1}}{#2}%
+  }
+
+
+\title{IDM}
+
+\begin{document}
+
+\note{Protocolos de red incompatibles dificultan la interoperabilidad}
+%
+\drop{L}{a} gran diversidad en protocolos y tecnologías existentes
+dificulta en muchas ocasiones el desarrollo de mecanismos para lograr
+interoperabilidad entre aplicaciones que se ejecutan en nodos
+cualesquiera, sea cual sea el tipo de red en la que se encuentren.  No
+siempre es posible ni deseable utilizar el mismo protocolo de red.
+
+Un buen ejemplo de este problema es el acceso a los nodos de una red
+de sensores. Tales dispositivos utilizan tecnologías de red como
+Zigbee o Bluetooth, que si bien pueden operar con la pila \ac{TCP/IP},
+su adopción suele requerir un esfuerzo considerable y no siempre se
+obtienen soluciones óptimas. Otras tecnologías pueden implicar
+protocolos especializados o hardware propietario, lo cual en algunos
+casos, puede hacer inviable esa posibilidad.
+
+Desde el punto de vista de las \ac{SAN}, éste es un asunto pendiente
+~---al menos no totalmente resuelto~--- en lo concerniente al transporte
+transparente de mensajes entre una red troncal y las redes de sensores
+a las que está conectada. En particular buscamos una solución para los
+siguientes dos casos, pero lo suficientemente flexible como para
+cubrir muchos otros.
+
+\begin{itemize}
+\item Acceso desde el \ac{SI} convencional de cualquier organización a
+  las redes de sensores que se desplieguen como soporte a servicios
+  cualesquiera.
+\item Interacción entre nodos de dos o más redes \ac{SAN} con
+  diferente tecnología, incluso si fuera necesario atravesar otras
+  intermedias, de cualquier tipo.
+\end{itemize}
+
+A fin de cuentas, el objetivo es poder enviar mensajes desde una
+red a cualquier otra sin importar que utilicen tecnologías o
+protocolos de red incompatibles.
+
+
+\section{Introducción}
+
+Existen varias alternativas para lograr la interconexión de redes
+heterogéneas. En la inmensa mayoría de los protocolos, \mws{} y
+sistemas diseñados para la conectividad de redes \ac{SAN} se
+considera, casi por descontado, que el sistema cuenta con una única
+pasarela de servicio que es utilizada por las redes externas para
+acceder a los nodos de la \ac{SAN}. La pasarela aloja normalmente
+componentes software cruciales para el acceso a los nodos, lo que
+conlleva una gran cantidad de problemas:
+
+\FIXME{que ya se comentaban en la sección~\ref{sec:prev:pasarelas}}
+
+Comparando las diferentes alternativas que se plantean en la citada
+sección, parece que la solución más flexible y eficiente es la
+utilización de un protocolo de red común, incluyendo la definición de
+un esquema de direccionamiento global. Dado que obviamente no se
+pretende substituir \ac{IP}, pero sí resolver los problemas que el uso
+de la pila \ac{TCP/IP} puede suponer en ciertos ámbitos, el camino
+adecuado parece ser un protocolo no solo independiente de la red,
+también del transporte. Construir un nuevo protocolo sobre la capa de
+enlace implicaría \emph{reinventar la rueda} enfrentándonos a
+problemas ya resueltos por otros ya probados y admitidos. La
+alternativa más adecuada es usar el protocolo o pila que resulte más
+\emph{natural} en cada entorno y construir nuestro protocolo
+\emph{homogeneizador} en una capa superior.
+
+La especificación «\ac{CORBA} Message
+Routing»~\cite[cap. 17]{corba-messaging} (en adelante \ac{CMR}) apunta
+en el camino correcto. El \mw{} proporciona una capa de abstracción lo
+suficientemente consistente como para ocultar los detalles de las
+tecnologías software y hardware subyacentes, se puede implementar
+sobre una gran diversidad de sistemas siempre que se cumplan ciertas
+condiciones (en función del \mw{} concreto), proporciona un sistema de
+direccionamiento abstracto mediante referencias interoperables a
+objetos, etc.
+
+Sin embargo, las motivaciones y decisiones de diseño de \ac{CMR} no
+corresponden a un protocolo general de encaminamiento de mensajes. Al
+menos los siguientes aspectos resultan inadecuados o contrarios en
+relación a los objetivos que perseguimos:
+
+\begin{itemize}
+\item Los encaminadores no disponen de tablas de encaminamiento que
+  permitan construir rutas extremo a extremo en colaboración con los
+  encaminadores vecinos. La ruta queda determinada por las referencias
+  indicadas en la propia referencia de objeto destino y/o de
+  decisiones administrativas locales del \ac{ORB} en el que ejecuta el
+  encaminador intermedio. La ruta que sigue la invocación es una forma
+  de lograr tolerancia a fallos ante la imposibilidad de entregar el
+  mensaje directamente al destino, o a circunstancias que impliquen la
+  desactivación temporal (o definitiva) de parte de los encaminadores
+  involucrados.
+
+\item No prevé la posibilidad de implementar encaminamiento dinámico
+  que permita establecer rutas alternativas ante cambios en la carga,
+  disponibilidad o desempeño de los recursos de la red.
+
+\item Las referencias a objetos, que son el equivalente funcional a
+  direcciones universales, pueden tener tamaños arbitrarios. Dado que
+  contienen una cantidad no acotada de perfiles y componentes,
+  que incluyen a su vez la lista de encaminadores posibles, el tamaño
+  de estas referencias puede alcanzar con facilidad miles de bytes.
+\end{itemize}
+
+No se puede considerar que éstos sean fallos de diseño en la
+especificación de \ac{CMR}. Simplemente ocurre que su finalidad es
+diferente, lo cual dificulta su aplicación al problema de la
+interconexión genérica de redes.
+
+Este capítulo propone la especificación e implementación de un nuevo
+protocolo llamado \ac{IDM}\index{IDM}, y de los mecanismos asociados
+para emplear un \ac{MDOO} de propósito general para encapsular y
+transportar mensajes como invocaciones a objetos, aprovechando algunos
+aspectos del diseño de \ac{CMR}, \ac{IP} y otros protocolos existentes,
+pero cuidando otros aspectos que consideramos esenciales para nuestro
+propósito:
+
+\begin{itemize}
+\item Mantener una sobrecarga lo suficientemente baja como para
+  permitir su aplicación a cualquier tipo de red, en especial las que
+  tienen un \ac{MTU} pequeño, como es habitual en las \ac{SAN}. Menor
+  sobrecarga de cabeceras implica también transmitir menos bytes y por
+  tanto consumir menos energía.
+
+\item Incorporación de información tanto a la red como a los propios
+  mensajes, que haga posible encaminamiento dirigido por requisitos de
+  \ac{QoS}, tanto \fg{DiffServ} (basado en clase) como \fg{IntServ}
+  (basado en flujo).
+
+\item El protocolo ha de ser lo suficientemente genérico como para
+  implementar algoritmos de encaminamiento dinámico sobre él.
+
+\item Debe tener capacidades de \fg{cross-layer}, que permitan
+  eliminar capas o prestaciones innecesarias en función de los
+  requisitos demandados por el cliente.
+
+\item Debe definir un esquema de direccionamiento universal,
+  jerárquico, con direcciones de tamaño máximo acotado pero lo más
+  pequeñas posible. El direccionamiento universal, que potencialmente
+  puede incluir nodos de miles de redes, puede implicar direcciones de
+  tamaño considerable. Por ello, es necesario llegar a un compromiso que
+  satisfaga ambos requisitos contrapuestos.
+\end{itemize}
+
+Tanto los elementos finales como los encaminadores de la red se
+modelarán e implementarán como objetos distribuidos
+convencionales. Además, el programador dispondrá de dos posibles
+puntos de vista a la hora de diseñar su aplicación:
+
+\begin{itemize}
+\item Un mecanismo transparente para la aplicación cliente, por medio
+  de un \ac{API} similar al de los \fg{sockets} \ac{BSD}.
+\item Una referencia a un objeto remoto (mediante un \fg{proxy}) sobre
+  la que puede invocar métodos conforme a su tipo.
+\end{itemize}
+
+
+\subsection{Inter-redes}
+
+Consideremos el problema como analogía a la red más conocida por
+todos. Internet, como en la mayoría de las redes, se fundamenta en
+el uso de un protocolo de red único, en este caso \ac{IP}. Un esquema
+global de direcciones lógicas permite la interconexión de redes con
+distintas tecnologías en la capa de enlace y física.  Por tanto, para
+que una red pueda formar parte de una \emph{inter-red} requiere que se
+cumplan ciertas condiciones básicas:
+
+\begin{itemize}
+\item Los \fg{hosts} deben entender el esquema de direccionamiento lógico.
+
+\item Los hosts deben poder \emph{fabricar} y entramar paquetes sobre
+  la tecnología de red subyacente.
+
+\item En el caso de que se trate de un medio de difusión, debe existir
+  un mecanismo que permita mapear direcciones lógicas a físicas.
+
+\item Debe existir una pasarela o encaminador capaz de reenviar
+  (\emph{forward}) paquetes entre redes diferentes, realizando los
+  procesos de desentramado y entramado que correspondan a los
+  protocolos de enlace de cada red.
+\end{itemize}
+
+En Internet, cuando se precisa atravesar una red que utiliza un
+protocolo de red incompatible, la solución suele ser alguna técnica de
+\emph{tunneling}, aunque eso impide normalmente implantar un esquema
+de encaminamiento homogéneo.  El otro problema evidente es enviar
+datos entre dispositivos de esas redes, que tienen protocolos de red y
+direcciones lógicas incompatibles.
+
+
+\subsection{Encaminamiento homogéneo}
+
+Nuestro objetivo es proporcionar un servicio de transporte de mensajes
+extremo a extremo, independiente de las tecnologías de las redes
+intermedias, aprovechando los protocolos y tecnologías disponibles en
+cada dominio a fin de no reimplementar funcionalidades ya
+disponibles. En muchos sentidos se trata de cumplir uno de los
+requisitos que planteaba el \ac{ISTAG}~\cite{istag01scenarios4ami}
+para los entornos inteligentes en cuanto a la necesidad de una
+infraestructura de comunicaciones integradora. También es una de las
+necesidades identificadas a menudo en los \mws{} para redes de
+sensores~\cite{Romer04ProgrammingParadigms}.
+
+\ac{IDM} no delega el direccionamiento a las capas inferiores aunque
+sí puede delegar el encaminamiento. En ese aspecto cada red puede
+considerarse un \ac{SA}. Por ejemplo, en una red \ac{TCP/IP} se pueden
+encapsular los mensajes sobre paquetes \ac{IP} y delegar el
+encaminamiento en los protocolos habituales, mientras que en una red
+\ac{MANET} sin \ac{IP} se puede implementar un protocolo de
+encaminamiento tipo \ac{AODV} cuyos mensajes van encapsulados en
+mensajes de nuestro protocolo. La combinación de un \mw{} con la
+posibilidad de encaminamiento multicapa (\fg{cross-layer}) extremo a
+extremo aporta muchas y valiosas ventajas:
+
+\begin{definitionlist}
+\item[Direccionamiento] Realmente global e independiente de la
+  tecnología y el protocolo.
+
+\item[Red virtual] Posibilita el despliegue de redes virtuales sobre
+  cualquier tipo de red existente o futura.
+
+\item[Calidad de servicio] Proporciona soporte para aplicar políticas
+  de calidad de servicio de alto nivel, puesto que se puede manejar
+  información mucho más rica en las capas superiores.
+
+\item[Flexible] Y adaptable a las necesidades de la
+  aplicación. Utilizar un \mw{} de comunicaciones no implica
+  necesariamente una sobrecarga de protocolos ni un aumento
+  significativo de la complejidad.  Por ejemplo, es perfectamente
+  viable encapsular mensajes sobre tramas Ethernet, si los
+  requerimientos de calidad de servicio solicitados lo permiten.
+
+\item[Servicios de la plataforma] Por el hecho de utilizar un \mw{} de
+  comunicaciones de propósito general, se puede contar con muchos de
+  los servicios comunes que incorpora. En el caso de nuestro prototipo
+  actual (basado en \ac{Ice}) podemos destacar: cifrado y autenticación
+  transparentes, soporte multi-lenguaje, persistencia automática,
+  despliegue, activación implícita, balanceo de carga, replicación
+  transparente, etc.
+
+\item[Transparencia de localización] Nuestros encaminadores son
+  entidades lógicas y, por tanto, pueden ser migrados o replicados a
+  otros nodos de la red de forma transparente.
+
+\item[Encaminamiento funcional] Esta cualidad permite plantear
+  esquemas y algoritmos de rutado basados en agrupaciones funcionales
+  de nodos y no solo en su localización geográfica.
+
+\item[Eficiencia] Nuestros encaminadores también se pueden implementar
+  sobre sistemas empotrados. Es posible utilizar plataformas que van
+  desde microcontroladores, como los que incluyen los nodos de una
+  \ac{SAN} hasta sistemas sintetizables sobre lógica reconfigurable,
+  como \acx{FPGA}. Esto es posible utilizando IceC.
+
+\item[Orientado a Objetos] Si el programador lo desea, es posible ver
+  al servidor como un objeto remoto por medio de la declaración de su
+  interfaz.  Si se trata de un servicio orientado a flujo o que no
+  requiere semántica en la invocación, es posible utilizar un \ac{API}
+  alternativo con primitivas \fg{read/write}.
+\end{definitionlist}
+
+
+\subsection{Acerca de los prototipos}
+
+En la sección~\ref{sec:protos:IDM} se describe en detalle el diseño de
+algunos de los prototipos iniciales.  Para su implementación se ha
+utilizado \ac{Ice}. Sin embargo, las propuestas que se plantean aquí
+no son específicas de éste. Se puede utilizar cualquier \mw{}
+heterogéneo basado en objetos distribuidos.
+
+A lo largo del texto se harán referencias a algunas de las
+características y particularidades de este \mw{} pues consideramos que
+puede ayudar a una mejor comprensión de los conceptos que se exponen.
+
+
+\section{Direccionamiento}
+
+Los esquemas de direccionamiento de red tradicionales utilizan una
+dirección lógica que identifica al host, delegando la
+identificación de la aplicación destino (el servidor) a los protocolos
+de la capa de transporte, llamados \emph{puertos} en el caso de
+\ac{TCP} y \ac{UDP}.  \ac{IDM} utiliza un esquema de direcciones
+jerárquico, en el que se reserva un sufijo para identificar la
+aplicación.  Estas direcciones son realmente identidades de objetos.
+Si se desea direccionamiento global, se puede usar cualquier esquema
+de identificadores que garantice la unicidad, llamados \acx{GUID}, y
+que permita obtener identificadores jerárquicos.  Aunque es posible,
+no es estrictamente necesario que la dirección identifique el
+host en el que reside el objeto.
+
+El cliente solo necesita conocer la identidad de objeto, que puede
+entenderse a todos los efectos como una dirección lógica.  Para llevar
+a cabo la transmisión de los datos se precisa de un \fg{endpoint}.
+Éste encapsula la implementación del transporte sobre una tecnología o
+protocolo concreto: \ac{TCP}, \ac{UDP}, \ac{IP}, Ethernet, \ac{XBow},
+Bluetooth, etc.  La elección del endpoint la realiza el
+encaminador en base a las restricciones de calidad de servicio
+especificadas por el cliente y de la disponibilidad de las interfaces
+físicas en el nodo en el que reside.  La transmisión puede no ser
+posible si no se satisfacen estas condiciones.
+
+\ac{IDM} proporciona mecanismos para localizar la dirección del
+endpoint de un objeto a partir de su identificador sin que sea
+necesario conocer su ubicación.  Más concretamente, sirve para
+averiguar el endpoint del adaptador en el que está
+registrado el objeto destino.
+
+
+\subsection{Identidad del objeto}
+
+Desde el punto de vista funcional, el identificador de objeto es una
+secuencia de bytes globalmente única con dos campos relevantes:
+
+\begin{definitionlist}
+\item[Aplicación]
+
+  Identifica el propósito del servicio, es decir, el objetivo común
+  de todos los objetos que la comparten.  Ejemplos válidos podrían ser
+  una red \ac{P2P}, un conjunto de suscriptores a un servicio de
+  \fg{streaming}, etc.  Debe entenderse como un filtro y, por ello, su
+  uso no es obligatorio. Este campo puede ser utilizado por los
+  encaminadores para dar un tratamiento especial a todos los mensajes
+  que corresponden a una aplicación determinada, aplicando técnicas de
+  \fg{traffic shaping} o priorización por contenido.
+
+\item[Nombre]
+
+  Identifica el objeto independientemente de la aplicación.  Un objeto
+  dado tiene el mismo nombre en todas las aplicaciones en la que esté
+  involucrado, aunque también es posible que un mismo objeto tenga
+  más de un nombre y, por tanto, varias identidades incluso dentro del
+  contexto de la misma aplicación.
+\end{definitionlist}
+
+El campo \emph{nombre} debe utilizar necesariamente un esquema
+jerárquico, pues esa es la base del funcionamiento de las tablas de
+rutas que se emplean.  Una de las características diferenciadoras es
+que este tipo de jerarquía puede ser funcional además de geográfica
+(ver figura~\ref{fig:functional_routing}). Esto aporta una gran
+flexibilidad y permite la migración transparente de nodos y
+encaminadores.  Aunque pueden desplegarse encaminadores en cualquier
+punto de la red, es imprescindible que existan al menos en las
+fronteras entre redes distintas pues el objetivo de \ac{IDM} es
+precisamente la interconexión de redes.
+
+\begin{figure}[h]
+\begin{center}
+\includegraphics[width=0.7\textwidth]{IDM-functional_routing.png}
+\caption{\acs{IDM}: Ejemplo de encaminamiento funcional}
+\label{fig:functional_routing}
+\end{center}
+\end{figure}
+
+
+\subsection{Un posible esquema de direccionamiento}
+
+Para ilustrar el sistema de direccionamiento se propone un esquema
+concreto basado en \ac{IPv6}.  Nótese que se trata únicamente de un
+ejemplo para ilustrar lo explicado en la sección anterior. El uso de
+este tipo de direcciones no implica utilizar ninguna de las
+restricciones documentadas en la \ac{RFC} 2460~\cite{rfc2460}. Se
+propone como un esquema de direccionamiento general. En principio
+\ac{IDM} está diseñado como un protocolo genérico para el transporte
+de mensajes en aplicaciones distribuidas, no como un substituto de
+\ac{IP}. Normalmente no serán necesarias direcciones tan grandes. En
+redes virtuales, de propósito específico o con un número reducido y
+acotado de nodos, es posible utilizar direcciones mucho más sencillas,
+de sólo unos pocos bytes.
+
+A partir del espacio de direccionamiento de $2^{128}$ definido en
+\ac{IPv6}, proponemos un esquema jerárquico multinivel similar al
+que se define en la \ac{RFC}2073~\cite{RFC2073}. La
+figura~\ref{fig:addressing_scheme} representa ese formato.
+
+\begin{figure}[h]
+\begin{center}
+\includegraphics[width=0.7\textwidth]{IDM-addr_scheme.png}
+\caption{Un posible esquema de direccionamiento para \acs{IDM}}
+\label{fig:addressing_scheme}
+\end{center}
+\end{figure}
+
+El espacio de direcciones queda dividido en los siguientes campos:
+
+\begin{itemize}
+\item \textbf{Aplicación} (32 bits). Tal como se indicaba se utiliza
+  para identificar una aplicación o red lógica concreta.
+
+\item \textbf{Organización} (32 bits). Identifica la institución
+  responsable o propietaria del objeto.
+
+\item \textbf{Sección} (8 bits). Niveles organizativos intermedios.
+\item \textbf{Unidad} (8 bits).
+\item \textbf{Subred} (16 bits).
+\item \textbf{Nodo} (16 bits). Identifica un nodo lógico dentro de la
+  red. Un mismo dispositivo puede contener varios.
+\item \textbf{Objeto} (16 bits). Identifica un objeto dentro del nodo.
+\end{itemize}
+
+Nótese que en ningún momento la utilización de este tipo de
+direcciones implica la necesidad de utilizar nada de \ac{IPv6} en la
+capa de red, ni tan siquiera una pila de protocolos tipo \ac{TCP/IP}.
+Es decir, no existe ninguna posibilidad de ambigüedad o colisión entre
+estos identificadores y la dirección lógica de la interfaz de red del
+dispositivo en que reside, incluso en el caso en que utilice una
+implementación real de \ac{IPv6} en la capa de red.
+
+
+\section{Endpoints}
+
+Un endpoint es una estructura lógica independiente que encapsula
+todos los detalles del transporte de datos para una tecnología o
+protocolo subyacente.  Bajo la perspectiva de \ac{IDM}, no hay
+diferencias funcionales entre un endpoint que permite abrir y mantener
+una conexión \ac{TCP} sobre una \ac{VPN}, de otro que envía tramas
+\ac{SLIP} sobre un cable RS-232. Las diferencias están en las
+prestaciones del endpoint, pero no en su uso.
+
+El endpoint es responsable de las siguientes tareas:
+
+\begin{itemize}
+\item Construye las tramas \ac{IDM}, serializa y encapsula la
+  invocación del usuario, calcula sumas de verificación, información
+  redundante, autenticación, etc. Todo esto se realiza apoyándose lo
+  máximo posible en los servicios proporcionados por el \mw. No tiene
+  porqué suponer un trabajo excesivamente complejo.
+
+\item Oculta todos los detalles relacionados con el uso de un
+  protocolo o interfaz de comunicaciones.
+
+\item Enumera y comprueba las prestaciones de \ac{QoS} que ofrece cada
+  transporte y tecnología concreta.
+\end{itemize}
+
+\ac{Ice} incluye de serie únicamente tres tipos de endpoints:
+\ac{TCP}, \ac{UDP} y \ac{SSL}.  Nosotros hemos desarrollado algunos
+más: Socket UNIX, colas de mensajes y Crossbow.  La
+figura~\ref{fig:IDM-layering} ilustra la relación que tiene \ac{IDM}
+con el modelo tradicional de capas por medio de los distintos
+endpoints. Dicha figura refleja que la elección no está condicionada por
+el protocolo de bajo nivel o la capa a la que pertenezca sino por la
+funcionalidad que proporcione, es decir, sus prestaciones de \ac{QoS}.
+
+\begin{figure}[h]
+\begin{center}
+\includegraphics[width=.4\textwidth]{IDM-layering.png}
+\caption{Relación de \acs{IDM} con el modelo de capas de red
+  tradicional}
+\label{fig:IDM-layering}
+\end{center}
+\end{figure}
+
+Cada endpoint tiene una representación textual que especifica el
+protocolo de nivel inferior utilizado, la dirección lógica o física,
+el puerto o cualquier otra información necesaria para establecer la
+conexión o el envío, y otros datos como \fg{timeouts}, certificados para
+cifrado, etc.
+
+En \ac{IDM} existe un tipo de endpoint muy especial que se encarga de
+anteponer la cabecera \ac{IDM} a los mensajes del protocolo
+inter-\ac{ORB} convencionales.  En el caso de \ac{Ice}, eso simplifica
+el uso de \ac{IDM} sobre la distribución software; no hay necesidad de
+modificar nada en el código que proporciona el fabricante.
+
+\ac{IDM} podría utilizar el protocolo inter-\ac{ORB} para codificar
+sus mensajes (como hace \ac{CMR}) pero ello implica una sobrecarga muy
+importante que resulta prohibitiva para \acp{MTU} pequeñas. Por ese
+motivo se ha definido un formato de cabecera específico (ver
+listado~\ref{code:IDM-format}). Los mensajes de reenvío (\fg{forward})
+~---cuyo equivalente en \ac{CMR} sería \function{send\_request()}~--- incluyen
+los siguientes campos:
+
+\begin{description}
+\item[\id{magic sequence}] (3 bytes) Caracteres `\code{I}',`\code{D}',`\code{M}'.
+\item[\id{messageType}] (1 byte) Tipo de mensaje.
+\item[\id{messageSize}] (4 bytes) Tamaño total del mensaje incluyendo la
+  carga útil.
+\item[\id{requestId}] (4 bytes) Identificador de la petición para realizar
+  la correspondencia con el mensaje de respuesta si lo hubiere.
+\item[\id{routerId}] (2 bytes) Identidad del encaminador que debe
+  reenviar este mensaje.
+\item[\id{dst}] (16 bytes) La identidad del objeto destino.
+\item[\id{src}] (16 bytes) La identidad del objeto que recibirá la respuesta.
+\item[\id{hopLimit}] (1 byte) Un contador que el encaminador descuenta en cada
+  salto. Evita bucles de encaminamiento de manera similar al campo
+  del mismo nombre en {IPv6}.
+\item[\id{tos}] (1 byte) Un código que identifica el \ac{ToS}. El
+  encaminador aplica un conjunto de restricciones de \ac{QoS} a cada
+  tipo de servicio. Su función es similar al campo del mismo nombre en
+  \ac{IP}.
+\item[\id{flow}] (4 bytes) Identifica una secuencia de mensajes que
+  comparten un perfil de \ac{QoS}.
+\item[\id{mode}] (1 byte) Características de entrega de la invocación: idempotente,
+  \fg{oneway}/\fg{twoway}, respuesta requerida, etc.
+\end{description}
+
+\begin{listing}[
+  language = Slice,
+  caption =  {[Formato de los mensajes \acs{IDM}]Formato de los
+    mensajes \acs{IDM}  (notación pseudo-Slice)},
+  label =    code:IDM-format]
+module IDM {
+  struct HeaderData {
+    byte magic_I, magic_D, magic_M;
+    byte messageType;
+    int messageSize;
+    int requestId;
+    byte routerId;
+    IDM::Identity dst;
+    IDM::Identity src;
+    byte hopLimit;
+    ToS tos;
+    int flow;
+    byte mode;
+  };
+
+  struct ForwardData {
+    string operation;
+    Encapsulation params;
+  };
+
+  struct ForwardUserMsg {
+    struct HeaderData;
+    struct ForwardData;
+  };
+
+  struct ForwardRawMsg {
+    struct HeaderData;
+    Ice::ByteSeq payload;
+  };
+};
+
+\end{listing}
+
+Nótese que el campo \id{router} no es una identidad \ac{IDM}
+completa. Solo se requiere el sufijo ~---la identidad del objeto
+dentro del nodo~--- dado que el adaptador que lo aloja debe ser
+localizado por otro medio. Por ejemplo, \ac{IP} no requiere
+identificar al encargado de procesar los paquetes puesto que
+únicamente hay un proceso de encaminamiento por host. Sin embargo, hay
+muchos motivos por los que puede resultar ventajoso que varios
+encaminadores \ac{IDM} (objetos) convivan al tiempo en un nodo.
+
+A pesar de la mencionada sobrecarga, puede ser interesante definir
+este mensaje como un método del encaminador, empleando Slice y
+utilizando \ac{IceP} como formato. El caso más claro para decantarse
+por esta opción lo tenemos a la hora de prototipar algoritmos de
+encaminamiento dinámico o depurar protocolos de aplicación
+encapsulados sobre \ac{IDM}. El motivo es que implementar y probar
+métodos convencionales del objeto es mucho más sencillo desde el punto
+de vista del desarrollo ya que los procesos de (de)serialización son
+realizados automáticamente por el \mw.
+
+En cuanto a la carga útil, \ac{IDM} permite transportar mensajes de
+dos tipos:
+
+\begin{description}
+\item[Raw] Ofrece al usuario un \ac{API} similar a los sockets
+  \ac{BSD} para darle la posibilidad de transportar bloques de datos
+  sin ningún tipo de semántica ni formato.
+
+\item[User] Si se dispone de la especificación de la interfaz del
+  objeto remoto, es posible realizar invocaciones a métodos. De ese
+  modo se logra serialización/deserialización de parámetros,
+  verificación de tipos, gestión de excepciones, etc.
+\end{description}
+
+
+\section{Gestión de calidad de servicio}
+
+Los requisitos de \ac{QoS} necesarios son especificados en el momento
+en que se solicita el acceso al objeto remoto.  Algunos de ellos, como
+el cifrado o la autenticación pueden establecerse extremo a extremo,
+pero otros como el ancho de banda requerido deben satisfacerse a lo
+largo de toda la ruta.  A continuación se listan algunos de los
+parámetros que hemos considerado, aunque varios no están disponibles
+en los prototipos actuales.
+
+\begin{itemize}
+\item Invocación oneway/twoway.
+\item Confirmación/Garantía de entrega.
+\item Ordenamiento de mensajes.
+\item Autenticación.
+\item Autorización.
+\item Latencia máxima.
+\item Ancho de banda mínimo.
+\item Encaminamiento fuente.
+\end{itemize}
+
+El cliente también debe especificar qué ocurre cuando no es posible
+satisfacer alguno de los requisitos. Solicitar una política estricta
+puede implicar la imposibilidad de llevar a cabo el transporte.
+
+Se considera que los encaminadores pueden contar con un conjunto de
+\ac{ToS} definidos junto con sus requisitos de
+\ac{QoS}. Adicionalmente, los encaminadores pueden implementar la
+interfaz \iface{IDM::QoS::Admin}, que se utiliza para definir nuevos
+perfiles de \ac{QoS}. Esta interfaz (listado~\ref{code:IDM-QoS}) tiene
+un método que permite registrar un perfil \ac{QoS} en base a un código
+de \ac{ToS} o bien a un identificador de flujo.
+
+\begin{listing}[
+  float,
+  language = Slice,
+  caption =  {Interfaz para administración de perfiles de \acs{QoS} en
+              encaminadores \acs{IDM}},
+  label =    code:IDM-QoS]
+module IDM {
+  module QoS {
+    enum feature {maxLatency,
+                  minBandwidth,
+                  reliability};
+
+    dictionary<feature,string> profile;
+
+    interface Admin {
+      void setQoSbyToS(profile qos, ToS tos);
+      profile getQoSbyToS(ToS tos);
+      void setQoSbyFlow(profile qos, int flow);
+      profile getQoSbyFlow(int flow);
+    };
+  };
+};
+\end{listing}
+
+
+\section{Entrega de mensajes}
+
+\ac{IDM} se ha concebido como un protocolo de red, de modo que se
+plantean los mismos problemas, con la salvedad de que deben resolverse
+en una capa de abstracción diferente: sobre el \mw{} en lugar de sobre
+la capa de enlace. Un problema básico en un protocolo de red es la
+descripción de los mecanismos de entrega de mensajes, tanto a vecinos
+de su red como a hosts fuera de ella.
+
+
+\subsection{Entrega directa}
+
+El método más simple de entrega de mensajes involucra únicamente al
+cliente y al objeto o servidor; a esto se denomina normalmente
+\emph{entrega directa}.  Para lograrlo es necesario averiguar los
+endpoints de que dispone el adaptador al que pertenece el objeto
+destino y después comprobar si el host cliente cuenta con algún
+endpoint compatible.
+
+
+\begin{figure}[h]
+\begin{center}
+\includegraphics[width=0.7\textwidth]{IDM-networks.pdf}
+\caption{Una inter-red \acs{IDM} formada por 4 redes \acs{IDM}}
+\label{fig:IDM-networks}
+\end{center}
+\end{figure}
+
+Una \emph{red \ac{IDM}} es un conjunto de objetos directamente
+alcanzables por medio de un \emph{tipo} de endpoint.  No tiene
+porqué existir ninguna relación entre una red \ac{IDM} y las redes
+físicas a las que está conectado el host.  Puede ocurrir incluso que
+un adaptador de objetos cuente con varios tipos de endpoints a pesar
+de estar conectado a una sola red física. En el escenario más simple
+los encaminadores \ac{IDM} se encuentran sólo en los nodos
+frontera entre redes con distintas tecnologías o protocolos de red
+incompatibles (ver figura~\ref{fig:IDM-networks}). Eso proporciona
+conectividad entre todos los objetos y clientes \ac{IDM}, pero hay
+otros usos posibles en los que pueden existir muchos más
+encaminadores, por ejemplo, en una \ac{MANET} todos los nodos son
+encaminadores \ac{IDM}.
+
+Para conocer los endpoints del adaptador al que pertenece un objeto se
+ha diseñado el protocolo \ac{ALP}. Es un protocolo general de
+descubrimiento de vecinos, pero asume que los actores son objetos
+accesibles mediante \ac{IDM}.  El listado~\ref{code:ALP} muestra la
+especificación de la interfaz que deben implementar los objetos que
+soportar este protocolo.
+
+\note{idm/slice/ALP.ice}
+%
+\begin{listing}[
+  float,
+  language = Slice,
+  caption =  {[Interfaz \acs{ALP} para registro de objetos y localización de
+             adaptadores] Interfaz \acs{ALP} para registro de objetos y
+             localización de adaptadores (especificación Slice)},
+  label =    code:ALP]
+module IDM {
+  module ALP {
+    exception ObjectNotFoundException {};
+
+    interface Locator {
+      void add(Object* prx);
+      void remove(IDM::Identity oid);
+
+      Object* resolve(IDM::Identity oid)
+        throws ObjectNotFoundException;
+    };
+
+    interface Lookup {
+      idempotent void request(IDM::Identity oid,
+                              Lookup* callback);
+      idempotent void reply(Object* prx);
+    };
+  };
+};
+\end{listing}
+
+
+% Locators y ALP
+Cada nodo de la red \ac{IDM} debe disponer de un \emph{demonio} local,
+llamado \emph{Servicio \ac{ALP}}, que implementa la interfaz
+\iface{ALP::Locator}. Mediante la invocación del método
+\function{lookup} y conocida la identidad destino, el nodo cliente
+obtiene un proxy, que permite realizar invocaciones directamente
+sobre el objeto remoto. Nótese que sólo es posible localizar endpoints
+de adaptadores vecinos, es decir, que se correspondan a nodos de la
+misma \emph{red \ac{IDM}}.
+
+Existen diversas formas de implementar el servicio \ac{ALP}. Para
+nuestros prototipos iniciales hemos considerado dos. La elección se
+hace por configuración y es transparente tanto para los clientes como
+para los objetos.
+
+\begin{itemize}
+\item Un servicio distribuido que permite a cualquier host interrogar
+  a su segmento de red sobre la existencia de un objeto concreto. Este
+  servicio utiliza los mecanismos \fg{multicast} o \fg{broadcast}
+  específicos de los endpoints disponibles. El servicio en cada
+  nodo debe atender los mensajes \function{request()} y los debe
+  contestar mediante mensajes \function{reply()}. Estos mensajes
+  pertenecen a la interfaz \emph{IDM::ALP::Lookup} y en la práctica
+  dicha interfaz se implementa como una faceta del \emph{Servicio ALP}
+  (ver figura~\ref{fig:IDM-blocks}).
+
+\item Utilizar las características de \emph{indirección} que incorpore
+  el \mw. En \ac{Ice} la indirección de objetos se consigue por medio
+  de un servicio llamado \emph{Ice Locator}, que aunque centralizado
+  puede estar replicado. \ac{IDM} dispone de un adaptador para
+  utilizar \iface{IceGrid::Locator} con una sobrecarga mínima.  Eso
+  resulta muy útil en segmentos grandes de la red virtual y cuando los
+  hosts dispongan de suficientes recursos de cómputo como para
+  ejecutar un nodo IceGrid \seesec{prev:icegrid}. Obviamente ofrece
+  alguna desventaja respecto al anterior: todos los hosts deben
+  conocer desde su arranque la referencia remota de al menos una de
+  las réplicas del \emph{Locator} y contar con un endpoint
+  compatible con ella.
+\end{itemize}
+
+\begin{figure}[h]
+\begin{center}
+\includegraphics[width=.7\textwidth]{IDM-blocks.png}
+\caption{Diagrama de bloques de \acs{IDM}}
+\label{fig:IDM-blocks}
+\end{center}
+\end{figure}
+
+
+En ambos casos, los hosts que deseen exportar objetos deben
+registrarlos en el servicio \ac{ALP} para que puedan ser encontrados
+por otros nodos, independientemente si están implementados mediante
+\emph{IceGrid Locator} o por el propio host.  Ambos mecanismos pueden
+coexistir en la misma red.
+
+El servicio \ac{ALP} cuenta con una caché que almacena temporalmente
+los endpoints resueltos, sin importar el modo en que se
+resolvieron.  El propósito de la caché es reducir el impacto en el
+desempeño que implican los mecanismos de resolución. Cuando se utiliza
+un servicio \ac{ALP} centralizado, el \fg{runtime} \ac{IDM} incorpora
+una caché local para evitar tener que repetir consultas al servicio
+remoto.
+
+
+\subsection{Entrega indirecta}
+
+Se utiliza entrega indirecta para aquellos objetos que no son
+alcanzables a través de ninguno de los endpoints del cliente.  En
+esos casos es necesaria la mediación de al menos un encaminador.
+Nótese que puede ocurrir un caso especial.  Aún existiendo
+accesibilidad directa por medio de un endpoint, es posible que
+las restricciones de \ac{QoS} impidan su uso y obliguen a utilizar uno
+o varios encaminadores para llegar al destino.
+
+
+\section{Encaminamiento}
+
+Todos los nodos que forman parte de una inter-red \ac{IDM} requieren
+de una tabla de rutas que determina si la entrega de mensajes puede
+realizarse de forma directa o se necesita un encaminador. Éste también
+es un objeto distribuido convencional, similar a los nodos servidores; la
+principal diferencia es que puede aceptar y redirigir mensajes que no
+van dirigidos explícitamente a él.
+
+El listado~\ref{code:IDM-rute-table} muestra la tabla de rutas de un
+encaminador. Se han utilizado identificadores textuales simplificados
+para mejorar la legibilidad.  Esta tabla de rutas muestra lo
+siguiente:
+
+\begin{itemize}
+\item Los objetos con prefijo {\small\texttt{NetA.Subnet1}} o
+  {\small\texttt{NetA.Subnet2}} son alcanzables directamente (entrega
+  directa).
+
+\item Los objetos con prefijo {\small\texttt{NetB}} son alcanzables a través
+  del encaminador {\small\texttt{NetA.Subnet1.R2}}.
+
+\item Para el resto de objetos se debe utilizar el encaminador
+  {\small\texttt{NetA.Subnet2.R3}} (ruta por defecto).
+\end{itemize}
+
+\begin{listing}[
+  float,
+  caption = Tabla de rutas IDM simplificada,
+  label =   code:IDM-rute-table]
+Router.Row.NetA.Subnet1.* = tcp, *
+Router.Row.NetA.Subnet2.* = tcp, *
+Router.Row.NetB. *        = udp tcp, NetA.Subnet1.R2
+Router.Row.*              = tcp, NetA.Subnet2.R1
+\end{listing}
+
+Cada fila de la tabla de rutas incluye una lista de tipos de
+endpoints que se pueden utilizar para contactar con objetos de
+esa red.  Eso se debe a que cada red \ac{IDM} está constituida por una
+o más redes físicas compatibles que utilizan un mismo protocolo (o
+conjunto de ellos).  Para utilizar los mecanismos \ac{ALP} de una red
+\ac{IDM} es necesario conocer al menos un tipo de endpoint compatible
+con esa red.
+
+La figura~\ref{fig:IPvsIDM} muestra las similitudes funcionales
+(salvando las distancias) entre los procesos de encapsulación en un
+encaminador \ac{IP} y uno \ac{IDM}.
+
+\begin{figure}[h]
+\begin{center}
+\includegraphics[width=.6\textwidth]{IPvsIDM.png}
+\caption{Comparación entre un encaminador \acs{IP} y uno \acs{IDM}}
+\label{fig:IPvsIDM}
+\end{center}
+\end{figure}
+
+
+
+\subsection{Encaminamiento dinámico}
+
+Como los encaminadores son objetos distribuidos, resulta relativamente
+sencillo implementar algoritmos de encaminamiento dinámico de
+cualquier tipo.  Cada mensaje del protocolo de encaminamiento elegido
+se define como un método del objeto en la interfaz específica.  Para
+soportar un nuevo protocolo de encaminamiento es suficiente que
+implemente la interfaz correspondiente como una nueva faceta.
+
+Como ejemplo, el listado~\ref{code:RIP} muestra la interfaz para el
+protocolo \ac{RIP}2~\cite{rfc2453}. En ambos métodos, el parámetro
+\id{oids} es una lista de identificadores de objetos, que puede estar
+vacía en el mensaje \function{request()}. El parámetro \id{src} es la
+identidad del encaminador que realiza la invocación.
+
+Este planteamiento permite implementar varios protocolos de
+encaminamiento dinámico en el mismo nodo, aunque de operar a la vez,
+debe definirse un criterio de prioridad para evitar conflictos en la
+actualización de la tabla de rutas.
+
+\note{idm/slice/Routing.ice}
+%
+\begin{listing}[
+  float,
+  language = Slice,
+  caption =  {Interfaz Slice para el protocolo de encaminamiento \acs{RIP}},
+  label =    code:RIP]
+module Routing {
+   sequence <Ice::Identity> IdentitySeq;
+
+   interface RIP {
+      void request(IdentitySeq oids, Ice::Identity src);
+      void response(IdentitySeq oids, Ice::Identity src);
+   };
+};
+\end{listing}
+
+
+\subsection{Gestión de la red}
+
+Dado que los encaminadores y los servidores son objetos distribuidos
+convencionales, es posible utilizar los servicios estándar para
+despliegue que proporciona el \mw{} (IceGrid en \ac{Ice}).
+Con ello se consiguen muchas funcionalidades, algunas típicas de una
+plataforma de gestión de red, pero con sobrecarga mínima y totalmente
+integradas en el funcionamiento de la propia red:
+
+\begin{definitionlist}
+\item[Planificación]
+
+  Es posible diseñar la topología, analizar las necesidades y
+  requerimientos de red y los usuarios, cuantificar los costes de
+  mantenimiento y operación incluso antes de disponer físicamente de
+  los hosts y el equipamiento de comunicaciones.
+
+\item[Despliegue]
+
+  Permite realizar distribución de ficheros de configuración,
+  bibliotecas y binarios a cada encaminador y, todo ello, a la medida
+  de las prestaciones y tipo de arquitectura de cada nodo.
+
+\item[Monitorización/contabilidad]
+
+  Se puede evaluar el rendimiento del sistema, consecución de las
+  prestaciones, ancho de banda disponible/consumido, latencia y muchas
+  otras variables de un modo sencillo en cada encaminador y servidor
+  de la red.
+
+\item[Gestión de la configuración]
+
+  Cuando se disponga de nuevas versiones del software, éste puede ser
+  desplegado a los encaminadores, incluyendo implementación o mejoras
+  de los protocolos de encaminamiento. También es sencillo añadir
+  interfaces para administración de los equipos, definición de
+  prioridades, políticas de seguridad, etc.
+\end{definitionlist}
+
+
+\section{Integración con el \mw}
+
+Una de nuestras prioridades es la integración del mecanismo de
+encaminamiento con el \mw. Para el programador, las diferencias
+entre usar un objeto \ac{IDM} y un objeto distribuido convencional
+deberían ser mínimas. Por ese motivo, el reenvío de mensajes se
+utiliza únicamente entre encaminadores y no afecta a la interacción de
+estos con los clientes y los objetos.
+
+Cuando un cliente desea hacer un invocación a un objeto \ac{IDM}
+remoto utiliza una clase especial para conseguir un proxy a su
+encaminador \emph{local} (situado en el mismo nodo que el cliente). El
+cliente realiza la invocación utilizando este proxy como si se tratase
+realmente del objeto remoto.
+
+A continuación se explica en detalle el proceso completo para realizar
+una invocación a un objeto \ac{IDM} remoto afectando al menos a un
+encaminador intermedio, es decir, potencialmente cliente y objeto
+destino podrían encontrarse en redes tecnológicamente distintas. La
+figura~\ref{fig:IDM-invocation} ilustra todo ese proceso.
+
+\begin{figure}[h]
+\begin{center}
+\includegraphics[width=\textwidth]{IDM-invocation.png}
+\caption{\acs{IDM}: Invocación de un objeto \acs{IDM} remoto}
+\label{fig:IDM-invocation}
+\end{center}
+\end{figure}
+
+El encaminador local puede recibir invocaciones destinadas a cualquier
+objeto. Si la identidad destino es la suya propia, él procesa el
+mensaje; en caso contrario, encamina el mensaje hacia su destino.
+Cuando un encaminador recibe una invocación de un cliente local
+realiza los siguientes pasos:
+
+\begin{enumerate}
+\item Si el mensaje requiere respuesta, crea un objeto \fg{callback}
+  alojado en su espacio de memoria para poder recibir la respuesta. La
+  referencia a este objeto es la que aparecerá como campo \id{src} de
+  la estructura \id{HeaderData}.
+\item Construye un mensaje según el formato de la estructura
+  \id{ForwardRawMsg} o \id{ForwardUserMsg} (en adelante \fg{forward},
+  por simplicidad) según el tipo de invocación elegida por el
+  cliente.
+\item Comprueba su tabla de encaminamiento y determina la identidad
+  del siguiente encaminador y los endpoints de que dispone.
+\item Filtra dichos endpoints según la información de \ac{QoS} de cada
+  uno de ellos en relación al \ac{ToS} al que corresponde la
+  invocación procedente del cliente. Si no encuentra ninguno
+  compatible retorna una excepción al cliente y aborta.
+\item Utiliza el servicio \ac{ALP} para determinar la información de
+  direccionamiento del protocolo inferior que corresponda.
+\item Utiliza dicho endpoint para enviar el mensaje \fg{forward} al
+  siguiente encaminador.
+\end{enumerate}
+
+Encaminador \emph{intermedio} es aquel que recibe mensajes
+\fg{forward} procedentes de cualquier otro encaminador. En este caso
+el procedimiento de trabajo incluye únicamente los puntos 3 a 6 de la
+lista anterior.
+
+El encaminador \emph{final}  debe encargarse de entregar invocaciones
+directamente a los objetos destino. Procede del siguiente
+modo:
+
+\begin{enumerate}
+\item Recibe un mensaje \fg{forward} y comprueba su tabla de rutas
+  para determinar si el destino es un objeto de la forma habitual.
+\item Mediante \ac{ALP} obtiene los endpoints del objeto destino. Si
+  ninguno de ellos fuera compatible con los requisitos de \ac{QoS}, en
+  este momento generaría una excepción dirigida al objeto \id{src}.
+\item A partir del contenido del mensaje \fg{forward} crea un mensaje
+  de invocación convencional (en el caso de \ac{Ice} será un
+  \id{HeaderData} y un \id{RequestData} del protocolo \ac{IceP}).
+\item Ejecuta dicha invocación directamente sobre el cliente. Puede
+  ser síncrono o no dependiendo del tipo de mensaje y el endpoint
+  utilizado.
+\item Si la invocación es síncrona y hay respuesta, el encaminador
+  procede con los mismos pasos que se han descrito para el encaminador
+  local, pero utilizando la referencia \id{src} contenida en el
+  mensaje \fg{forward}.
+\end{enumerate}
+
+Cuando la respuesta llega al objeto temporal que creó el encaminador
+local, éste crea una respuesta según el formato del protocolo
+inter-\ac{ORB} y lo entrega al cliente por la misma conexión que se
+estableció para realizar la invocación. El cliente ha estado bloqueado
+durante todo el proceso a menos que utilice los mecanismos \ac{AMI}
+proporcionados por el \mw.
+
+Los calificativos \emph{local}, \emph{final} e \emph{intermedio} no
+determinan tipos de encaminadores sino roles. Todos los encaminadores
+pueden funcionar con cualquiera de esos roles. La distinción
+presentada aquí se debe a motivos de legibilidad y
+simplificación de las fases del procedimiento.
+
+Nótese que a diferencia de \ac{CMR}, se asume que todo nodo que aloja
+clientes tiene un encaminador local, que es el único que recibe
+invocaciones directamente de los clientes. Es decir, un cliente no
+puede efectuar invocaciones convencionales (no-\ac{IDM}) a
+encaminadores fuera de su nodo. Aunque esto implica un salto más,
+mejora la escalabilidad del sistema dado que los encaminadores
+tienen que almacenar objetos callback para sus clientes. De ese
+modo, es mucho más sencillo dimensionar las necesidades de memoria y
+procesamiento del nodo, y los encaminadores sin clientes ni objetos
+pueden ser mucho más sencillos pues están por diseño exentos de esa
+tarea.
+
+
+\subsection{API}
+
+La intención es que \ac{IDM} esté disponible como una biblioteca
+para servicios avanzados de comunicaciones extremo a extremo de
+forma transparente.  Por ese motivo, se ha diseñado e implementado
+como un conjunto de clases que permite desarrollar objetos y
+clientes de una manera muy sencilla.
+
+Desde el punto de vista del programador de aplicaciones, para la
+implementación de servidores sólo es necesario tener en cuenta una
+pequeña diferencia respecto a la implementación de un servidor
+\ac{Ice} convencional. Se debe utilizar un \emph{Adapter} especial,
+llamado \iface{IDM::Adapter}. Es un \emph{decorador}\footnote{en
+  referencia al patrón de diseño
+  \fg{decorator}~\cite{design_patterns}} que extiende la funcionalidad
+del \emph{Adapter} \ac{Ice}.  Al crearse este adaptador, se registra
+automáticamente en el \emph{Servicio ALP} disponible (tal como se haya
+especificado por configuración). El listado~\ref{code:IDM-server}
+muestra la implementación en lenguaje C++ de un objeto mínimo
+accesible mediante \ac{IDM}.
+
+\lstinputlisting[
+  language = C++,
+  caption =  {Implementación de un servidor \acs{IDM} mínimo},
+  label =    code:IDM-server]
+{listings/idm-server.cpp}
+
+El cliente \ac{IDM} también requiere algunas modificaciones respecto a
+la implementación de un cliente \ac{Ice} convencional.  Es necesario
+crear una instancia de la clase \iface{IDM::Socket}.  Éste dispone de
+un método \function{plug()} que acepta un identificador de objeto y
+devuelve un proxy que permite enviar mensajes a ese objeto.
+Internamente, esa clase consulta la tabla de encaminamiento del nodo y
+utiliza el servicio \ac{ALP} para conseguir la referencia ya sea para
+entrega directa o indirecta (primer salto).  El
+listado~\ref{code:IDM-client} muestra la implementación de un cliente
+para acceder al servidor del listado~\ref{code:IDM-server}.
+
+\lstinputlisting[
+  float,
+  language = C++,
+  caption =  {Implementación de un cliente \acs{IDM} mínimo},
+  label =    code:IDM-client]
+{listings/idm-client.cpp}
+
+
+\section{Conclusiones}
+
+Aunque a primera vista, el diseño e implementación de un protocolo de
+red por encima incluso de la capa de transporte pueda parecer un
+concepto contradictorio y un esfuerzo baldío, queda demostrado que las
+prestaciones que ofrece \ac{IDM} pueden resultar muy valiosas en
+muchos escenarios diferentes.  Algunas de las más importantes son:
+
+\begin{itemize}
+\item Direccionamiento lógico universal independiente de la tecnología.
+\item Transporte transparente extremo a extremo.
+\item Mejoras en la eficiencia al poder seleccionar transportes
+  específicos con menor granularidad, que decide el diseñador de la
+  aplicación.
+\item Prestaciones adicionales transparentes y desacopladas del
+  transporte como cifrado, contabilidad, autenticación, autorización,
+  etc.
+\item Encaminamiento funcional.
+\item Migración de nodos y encaminadores.
+\end{itemize}
+
+Aprovechando las posibilidades que ofrece \ac{IDM}, estamos evaluando su
+aplicación a diversos campos:
+
+\begin{itemize}
+\item Redes \acx{MANET}. Cada nodo de la red ad hoc puede incluir un
+  encaminador \ac{IDM}, homogeneizando el acceso desde la red
+  troncal. Este enfoque permite incluso plantear redes ad hoc
+  híbridas como, por ejemplo, una red \ac{IP} y una red de sensores.
+
+\item Implementación del encaminador \ac{IDM} en sistemas empotrados
+  basados en microcontrolador y/o en \ac{FPGA} para el desarrollo de
+  encaminadores eficientes para redes \ac{SAN} y grids
+  heterogéneos~\cite{Rincon09SupportingOS}.
+
+\item Métricas del desempeño de la red y del servicio prestado.
+
+\item Red virtual para provisión de \ac{QoS}~\cite{Urzaiz09Anovel}.
+\end{itemize}
+
+En lo referente al desarrollo de nuevos endpoints, cabe destacar
+que se encuentran en fase de desarrollo los que corresponden a
+protocolos tan variados como Zigbee, BlueTooth y Ethernet.
+
+Un concepto que creemos merece la pena abordar es lo que llamamos
+\emph{decoradores}~\footnote{También en referencia al patrón de
+  diseño.} de endpoints.  Pueden añadir características opcionales a
+cualquier endpoint, como cifrado, garantía de entrega, contabilidad,
+etc.  Estos decoradores facilitan la composición funcional de
+endpoints dando lugar a combinaciones muy interesantes.  Por
+ejemplo, si se requiere transmitir audio en una red \ac{LAN} Ethernet
+salvaguardando la privacidad, pero sin necesidad de garantizar la
+entrega, se podría utilizar un endpoint que realiza transporte
+directamente sobre tramas Ethernet y que está \emph{decorado} con un
+endpoint que cifra los mensajes.  De ese modo, se puede conseguir el
+transporte deseado sin la sobrecarga que implicarían las cabeceras
+\ac{IP} y \ac{UDP}.
+
+
+
+\end{document}
+
+% Local Variables:
+%   coding: utf-8
+%   fill-column: 90
+%   mode: flyspell
+%   ispell-local-dictionary: "castellano8"
+%   mode: latex
+% End:
+
+%  LocalWords:  interoperabilidad middleware
