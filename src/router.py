@@ -25,8 +25,8 @@ def load_slice(name, parent=""):
 
 load_slice("idm.ice", "idm/")
 load_slice("duo_idm.ice", "duo/")
-import IDM
-import DUO
+import IDM  # noqa
+import DUO  # noqa
 
 
 MAX_ADDRESS_SIZE = 128  # given in bits
@@ -103,6 +103,12 @@ class RouteDict:
         return self._items[key]
 
     def __setitem__(self, dst, flow):
+        key = (dst, flow.netmask)
+        try:
+            self._keys.remove(key)
+        except:
+            pass
+
         self._keys.append((dst, flow.netmask))
         self._keys.sort(key=lambda p: int(p[1]), reverse=True)
         self._items[dst] = flow
