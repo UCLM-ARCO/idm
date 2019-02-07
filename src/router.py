@@ -556,8 +556,12 @@ class RouterServer(Ice.Application):
     @staticmethod
     def get_router_table_path(ic):
         path = get_property(ic, "Router.Table.Path")
-        if not os.path.exists(path):
-            os.mknod(path)
+        if os.path.exists(path):
+            return path
+
+        dirpath = os.path.dirname(path)
+        os.makedirs(dirpath, exist_ok=True)
+        os.mknod(path)
         return path
 
 

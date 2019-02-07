@@ -14,14 +14,15 @@ class TestReliability(TestCase):
 
     def launch_router(self):
         router = Task(desc="IDM router", detach=True)
-        cmd = router.command('src/router.py --Ice.Config=test/idm-router.config')
+        cmd = router.command('src/router.py --Ice.Config=test/config/idm-router.config')
         router.assert_that(
             cmd.stderr.content, hamcrest.contains_string("adv from 'FA10 "))
 
     def launch_server(self, count):
         server = Task(desc="IDM server", detach=True)
         cmd = server.command(
-            "test/count-ice-ping-server.py --Ice.Config=test/server.config")
+            "test/bin/count-ice-ping-server.py --Ice.Config=test/config/server.config",
+            expected=None)
         expected_msg = "ice_ping called {} times".format(count)
         server.wait_that(
             cmd.stdout.content, hamcrest.contains_string(expected_msg))
@@ -29,5 +30,6 @@ class TestReliability(TestCase):
     def run_stress_client(self, count):
         client = Task(desc="IDM client")
         client.command(
-            "test/multi-ice-ping-client.py FA10 {} --Ice.Config=test/client.config".format(
-                count))
+            "test/bin/multi-ice-ping-client.py FA10 {} --Ice.Config=test/config/client.config".format(
+                count),
+            expected=None)

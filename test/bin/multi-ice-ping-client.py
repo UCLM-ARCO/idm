@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- mode: python; coding: utf-8 -*-
 
 import sys
@@ -8,7 +8,7 @@ import Ice
 class Client(Ice.Application):
     def run(self, args):
         if len(args) != 3:
-            print "Usage: {} <dst> <count>".format(args[0])
+            print("Usage: {} <dst> <count>".format(args[0]))
             return -1
 
         ic = self.communicator()

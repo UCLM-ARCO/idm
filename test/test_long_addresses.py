@@ -1,4 +1,4 @@
-# -*- mode: python; coding: utf-8 -*-
+# -*- mode: python3; coding: utf-8 -*-
 
 import os
 from prego import TestCase, Task
@@ -6,7 +6,7 @@ from hamcrest import contains_string
 
 
 def get_property(config, prop):
-    with file(config) as f:
+    with open(config) as f:
         for line in f.readlines():
             if line.strip().startswith(prop):
                 return line.split("=")[1].strip()
@@ -65,34 +65,36 @@ class TestAddressing(TestCase):
 
     # -- below are just helper methods ---------------------------------------------
 
-    def clean(cls):
+    def clean(self):
         for path in ["router1.table", "router2.table", "controller-saved-state.bin"]:
+            path = os.path.join("config", path)
             if os.path.exists(path):
                 os.remove(path)
 
     def run_controller(self):
         controller = Task("IDM controller", detach=True)
         controller.command(
-            "idm-controller --Ice.Config=test/controller.config", expected=-15)
+            "idm-controller --Ice.Config=test/config/controller.config", expected=-15)
 
     def run_router(self, index):
         router_t = Task("IDM Router {}".format(index), detach=True)
         router = router_t.command(
-            "src/router.py --Ice.Config=test/router{}.config".format(index))
+            "src/router.py --Ice.Config=test/config/router{}.config".format(index))
         setattr(self, "router_r{}".format(index), router)
 
     def run_node(self, index, router, transient=False):
         node_t = Task("Node {}".format(index), detach=True)
         node = node_t.command(
-            "test/ibool-server.py {} --Ice.Config=test/{}.config {}".format(
+            "test/bin/ibool-server.py {} --Ice.Config=test/config/{}.config {}".format(
                 "--transient" if transient else "",
-                router, self.NODE_ADDR[index]))
+                router, self.NODE_ADDR[index]),
+            expected=None)
         setattr(self, "node{}_t".format(index), node_t)
         setattr(self, "node{}".format(index), node)
 
     def add_flow(self, src, rule, dst):
-        router1_prx = get_property("test/server_{}.config".format(src), "IDM.Router.Proxy")
-        router2_prx = get_property("test/server_{}.config".format(dst), "IDM.Router.Proxy")
+        router1_prx = get_property("test/config/server_{}.config".format(src), "IDM.Router.Proxy")
+        router2_prx = get_property("test/config/server_{}.config".format(dst), "IDM.Router.Proxy")
         admin = Task("Add flows {} -> {}".format(src, dst))
         admin.command(
             "src/admin.py '{}' add {} '{}'".format(router1_prx, rule, router2_prx))
@@ -100,8 +102,9 @@ class TestAddressing(TestCase):
     def run_client_to_node(self, index, router):
         client = Task("Client to Node {}".format(index))
         client.command(
-            "test/ibool-client.py --Ice.Config=test/client_{}.config {} {}".format(
-                router, self.CLIENT_ADDR, self.NODE_ADDR[index]))
+            "test/bin/ibool-client.py --Ice.Config=test/config/client_{}.config {} {}".format(
+                router, self.CLIENT_ADDR, self.NODE_ADDR[index]),
+            expected=None)
 
         node = getattr(self, "node{}".format(index))
         client.assert_that(
@@ -112,8 +115,9 @@ class TestAddressing(TestCase):
     def run_client_to_missing_node(self, index, router):
         client = Task("Client to Node {} (which is missing)".format(index))
         client.command(
-            "test/ibool-client.py --Ice.Config=test/client_{}.config {} {}".format(
-                router, self.CLIENT_ADDR, self.NODE_ADDR[index]))
+            "test/bin/ibool-client.py --Ice.Config=test/config/client_{}.config {} {}".format(
+                router, self.CLIENT_ADDR, self.NODE_ADDR[index]),
+            expected=None)
 
         router = getattr(self, "router_{}".format(router))
         client.assert_that(

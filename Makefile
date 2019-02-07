@@ -15,8 +15,9 @@ install:
 .PHONY: tests clean
 tests: OPTS ?= -eo
 tests:
-	-prego $(OPTS) test/test_*.py
+	-prego3 $(OPTS) test/test_*.py
 
 clean:
 	$(MAKE) -C lab/08-esp-router/ $@
 	find -name "*.pyc" -print -delete
+	$(RM) controller-saved-state.bin

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- mode: python; coding: utf-8 -*-
 
 import time
@@ -16,7 +16,7 @@ class ServantI(Ice.Object):
     def ice_ping(self, current):
         time.sleep(1)
         self.counter += 1
-        print "ice_ping called {} times".format(self.counter)
+        print("ice_ping called {} times".format(self.counter))
 
 
 class Server(Ice.Application):
@@ -29,9 +29,9 @@ class Server(Ice.Application):
         oid = ic.getProperties().getProperty("IDM.Address")
         prx = adapter.add(ServantI(), ic.stringToIdentity(oid))
         self.register_on_router(prx)
-        print "Proxy: '{}'".format(prx)
+        print("Proxy: '{}'".format(prx))
 
-        print "Waiting events..."
+        print("Waiting events...")
         self.shutdownOnInterrupt()
         ic.waitForShutdown()
 

@@ -34,10 +34,7 @@ def addressToString(address):
     if len(address) < 2:
         raise ValueError(INVALID_ADDRESS.format(address))
 
-    # Only Python3 solution:
-    # return address.hex().upper()
-
-    return "".join("{:02x}".format(ord(c)) for c in address).upper()
+    return address.hex().upper()
 
 
 def assert_hex(text):
