@@ -1,0 +1,9 @@
+image: arco/ice36-prego
+
+pipelines:
+  default:
+    - step:
+        script:
+          - apt-get update
+          - apt-get install -y python3-prego duo idm-controller
+          - make tests
