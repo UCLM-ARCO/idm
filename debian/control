@@ -1,10 +1,10 @@
 Source: idm
 Section: net
-Priority: extra
+Priority: optional
 Maintainer: Oscar Aceña Herrera <oscaracena@gmail.com>
 Uploaders: David Villa Alises <David.Villa@gmail.com>
-Build-Depends: debhelper (>= 7.0.50~), python3
-Standards-Version: 3.9.8
+Build-Depends: dh-python, debhelper (>= 7.0.50~), python3
+Standards-Version: 4.4.0
 
 Package: idm
 Architecture: all

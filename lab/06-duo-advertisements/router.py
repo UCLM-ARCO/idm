@@ -74,7 +74,7 @@ class RoutingTable(object):
                 destination, endpoints, mode = map(str.strip, line.split(" | "))
                 self.add(destination, endpoints, mode)
             except Exception:
-                logging.warn("WARNING: Invalid line on routing table, ignoring...")
+                logging.warning("WARNING: Invalid line on routing table, ignoring...")
 
     def store(self):
         header = ": DO NOT EDIT, it will be overwritten!\n"
@@ -168,7 +168,7 @@ class DUOAdvertiser(IDM.NeighborDiscovery.Listener):
         mgr = IceStorm.TopicManagerPrx.checkedCast(mgr)
 
         if mgr is None:
-            logging.warn("DUO advertisements disabled")
+            logging.warning("DUO advertisements disabled")
             return
 
         try:
@@ -180,7 +180,7 @@ class DUOAdvertiser(IDM.NeighborDiscovery.Listener):
         try:
             pub.ice_ping()
         except Ice.NoEndpointException:
-            logging.warn("DUO advertisements disabled")
+            logging.warning("DUO advertisements disabled")
             return
 
         self.enabled = True

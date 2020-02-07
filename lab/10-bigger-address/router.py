@@ -199,7 +199,7 @@ class RoutingTable(object):
                 flow_info = FlowInfo(destination, netmask, router_id, router_endps, mode)
                 self.add(flow_info)
             except Exception:
-                logging.warn(" invalid line on routing table, ignoring...")
+                logging.warning(" invalid line on routing table, ignoring...")
 
     def store(self):
         # FIXME: store in a separate thread
@@ -397,7 +397,7 @@ class DUOAdvertiser(IDM.Router):
         mgr = IceStorm.TopicManagerPrx.checkedCast(mgr)
 
         if mgr is None:
-            logging.warn(" DUO advertisements disabled")
+            logging.warning(" DUO advertisements disabled")
             return
 
         try:
@@ -409,7 +409,7 @@ class DUOAdvertiser(IDM.Router):
         try:
             pub.ice_ping()
         except Ice.NoEndpointException:
-            logging.warn(" DUO advertisements disabled")
+            logging.warning(" DUO advertisements disabled")
             return
 
         self.enabled = True
@@ -513,11 +513,11 @@ class RouterServer(Ice.Application):
             self.controller = IDM.ControllerPrx.checkedCast(self.controller)
         except Ice.Exception as ex:
             msg = str(ex).replace("\n", "\n" + 12 * " " + "> ")
-            logging.warn(" could not contact with controller: " + msg)
+            logging.warning(" could not contact with controller: " + msg)
             self.controller = None
 
         if not self.controller:
-            logging.warn(" router controller not defined")
+            logging.warning(" router controller not defined")
             return
 
     def register_router(self, proxy):

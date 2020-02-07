@@ -87,7 +87,7 @@ class Network:
             msg = " - there are two or more endpoints for router {}:\n".format(node.address)
             msg += node.proxy + "\n" + current.proxy
             msg += "\nusing most recent one!"
-            logging.warn(padstr(msg))
+            logging.warning(padstr(msg))
 
             # treat old router as a not managed
             current.managed = False
