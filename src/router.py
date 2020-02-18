@@ -560,6 +560,8 @@ class RouterServer(Ice.Application):
             return path
 
         dirpath = os.path.dirname(path)
+        if dirpath == "":
+            dirpath = "."
         os.makedirs(dirpath, exist_ok=True)
         os.mknod(path)
         return path
